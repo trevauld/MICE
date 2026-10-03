@@ -11,6 +11,7 @@ const path = require('path');
   res.removed = await p.evaluate(() => ['cond', 'notes', 'howTitle'].every((id) => !document.getElementById(id)) && !document.querySelector('h1,.lede'));
   res.padFirst = await p.evaluate(() => document.querySelector('.wrap').firstElementChild.querySelector('#pad') !== null);
   res.userSelect = await p.evaluate(() => getComputedStyle(document.querySelector('#pad .big')).userSelect);
+  res.bodySelect = await p.evaluate(() => [getComputedStyle(document.body).userSelect, getComputedStyle(document.getElementById('tlTitle')).userSelect]);
   res.folds = await p.evaluate(() => [...document.querySelectorAll('details.fold')].map((d) => d.open));
   await p.click('#sesFold > summary'); res.afterClick = await p.evaluate(() => document.getElementById('sesFold').open);
   res.options = await p.evaluate(() => [...document.querySelectorAll('#trigger option')].map((o) => o.value));
