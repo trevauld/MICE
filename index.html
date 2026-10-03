@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v7</div>
+  <div class="ver" id="ver">MICE v8</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -974,9 +974,11 @@ function onFrame(cap, t, rawDb, cancDb, cueMs, end, held) {
       if (V.qrun >= 12) { V.state = 'quiet'; V.qrun = 0; voiceOff(cap, V.candEnd); }
     } else V.qrun = 0;
   }
-  if (V.state === 'voice' && cap.prof) {
-    learn(cap, db, f0, end, V.floor);
-    if (!cap.prof.shown && profReady(cap.prof)) { cap.prof.shown = true; showMatch(); }
+  if (V.state === 'voice' && cap.prof && !cap.prof.broken) {
+    try {                                    // learning is optional: it must never get in the way of voice detection
+      learn(cap, db, f0, end, V.floor);
+      if (!cap.prof.shown && profReady(cap.prof)) { cap.prof.shown = true; showMatch(); }
+    } catch (err) { cap.prof.broken = true; console.error('voice learning stopped:', err); }
   }
   const vad = V.state === 'voice' ? 1 : 0;
   cap.hist.t[j] = t; cap.hist.db[j] = db; cap.hist.v[j] = vad; cap.hist.f0[j] = f0;
