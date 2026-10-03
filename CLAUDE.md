@@ -79,7 +79,7 @@ See tests/README.md.
 - `index.html` is the source; `sh build.sh` copies it to `MICE.html` (the open-from-disk copy). Edit index.html only.
 - Extra files for installing: `manifest.webmanifest`, `sw.js` (precaches the shell; pages network-first, assets cache-first), `icons/` (made by `make_icons.py`).
 - The service worker registers only on http(s), so file:// use is unchanged. Still no network requests: the worker only caches our own files.
-- Bump `VERSION` in sw.js on each release. The worker skips waiting (an installed iOS app is never fully closed, so waiting would pin the old version). Pages are network-first with the cache as the offline fallback, so a launch online gets the latest.
+- Bump `VERSION` in sw.js and the "MICE vN" label at the top of index.html together on each release (ui_check.js fails if they differ). The worker skips waiting (an installed iOS app is never fully closed, so waiting would pin the old version). Pages are network-first with the cache as the offline fallback, so a launch online gets the latest.
 - Host over HTTPS (any static host; localhost also counts). The mic and installing need a secure context.
 - `tests/ui_check.js` checks the v2 interface (removed items, folds, hold keys, 80% pad on touch).
 - `tests/pwa_check.js` checks install and offline reload (serve the folder on :8077 first).

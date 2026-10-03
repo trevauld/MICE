@@ -105,10 +105,12 @@ details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary::after{content:"+";font-size:1.3rem;line-height:1;color:var(--muted)}
 details.fold[open]>summary::after{content:"\2212"}
 details.fold[open]>summary{margin-bottom:12px}
+.ver{font-size:.74rem;letter-spacing:.06em;color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:-12px}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="ver" id="ver">MICE v7</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
