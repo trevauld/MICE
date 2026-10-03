@@ -1,0 +1,6 @@
+name = "mice"
+compatibility_date = "2026-10-01"
+
+# Static site: no Worker script, just the files in this folder (filtered by .assetsignore).
+[assets]
+directory = "."

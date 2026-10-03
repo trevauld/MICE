@@ -1,0 +1,11 @@
+# Not part of the deployed app
+.git
+.gitignore
+.assetsignore
+wrangler.toml
+CLAUDE.md
+build.sh
+make_icons.py
+tests
+node_modules
+MICE.html
