@@ -81,6 +81,12 @@ See tests/README.md.
 - The service worker registers only on http(s), so file:// use is unchanged. Still no network requests: the worker only caches our own files.
 - Bump `VERSION` in sw.js on each release. A new worker takes over on the next launch, never mid-session.
 - Host over HTTPS (any static host; localhost also counts). The mic and installing need a secure context.
+- `tests/ui_check.js` checks the v2 interface (removed items, folds, hold keys, 80% pad on touch).
 - `tests/pwa_check.js` checks install and offline reload (serve the folder on :8077 first).
 - Live at https://mice.keremk.workers.dev (Cloudflare Worker, static assets, deploys from GitHub main; see wrangler.toml and .assetsignore).
 - Checked on iOS Safari: works. It has no folder picker, so sessions download as .zip there.
+
+## v2 interface
+- Pad first; on touch screens it is 80% of the page height. Session and Cue sound panels collapse (state remembered).
+- Saving at stop is optional (`S.save`, default off on iOS, on elsewhere). Condition and notes fields were removed from the UI and the session JSON.
+- Hold key: Space, Left Ctrl, Left Shift or any key.

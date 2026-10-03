@@ -41,7 +41,7 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:24px clamp(16px,3vw,32px) 48px}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:16px clamp(16px,3vw,32px) 48px}
 .wrap{max-width:1180px;margin:0 auto;display:grid;gap:20px}
 header{display:grid;gap:2px}
 .eyebrow{margin:0;font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--cue);font-weight:650}
@@ -58,7 +58,8 @@ h2{margin:0;font-size:1rem;font-weight:650}
 .small{font-size:.86rem}
 :focus-visible{outline:3px solid var(--voice);outline-offset:2px}
 
-.pad{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:100%;height:clamp(150px,26vh,230px);border:2px solid var(--line);border-radius:20px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;transition:background-color .06s,border-color .06s}
+.pad{-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:100%;height:clamp(150px,26vh,230px);border:2px solid var(--line);border-radius:20px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;transition:background-color .06s,border-color .06s}
+.pad *{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .pad .big{font-size:2rem;font-weight:700;letter-spacing:.02em}
 .pad .hint{font-size:.9rem;color:var(--muted)}
 .pad.on{background:var(--cue);border-color:var(--cue);color:var(--on-cue)}
@@ -96,16 +97,16 @@ input[type="range"]{width:100%;accent-color:var(--cue)}
 .note{margin:0;padding:8px 12px;border-radius:8px;background:var(--warn-soft);color:var(--ink);font-size:.86rem}
 ul.files{margin:0;padding-left:1.1em;display:grid;gap:4px;font-size:.86rem}
 code{font-family:var(--mono);font-size:.85em}
+@media (pointer:coarse){.pad{height:80vh;height:80dvh}}
+details.fold>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::after{content:"+";font-size:1.3rem;line-height:1;color:var(--muted)}
+details.fold[open]>summary::after{content:"\2212"}
+details.fold[open]>summary{margin-bottom:12px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <p class="eyebrow">Manual choral cue</p>
-    <h1>MICE</h1>
-    <p class="lede">Hold the pad, or the space bar, just before you voice. A soft tone plays for as long as you hold. While a session is running, MICE also logs every press and your voice, so the timing can be studied later.</p>
-  </header>
-
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -142,8 +143,8 @@ code{font-family:var(--mono);font-size:.85em}
     </div>
 
     <div class="col">
-      <section class="panel" aria-labelledby="sesTitle">
-        <h2 id="sesTitle">Session</h2>
+      <details class="panel fold" id="sesFold">
+        <summary><h2 id="sesTitle">Session</h2></summary>
         <div class="row">
           <button class="btn primary" id="sesBtn" type="button">Start session</button>
           <button class="btn" id="delayBtn" type="button">Measure audio delay</button>
@@ -153,17 +154,16 @@ code{font-family:var(--mono);font-size:.85em}
         <p class="small muted" id="bleedMsg" style="margin:0"></p>
         <p class="note" id="envNote" hidden></p>
         <label class="f">Microphone<select id="micSel"><option value="">Default microphone</option></select></label>
-        <label class="f">Condition<select id="cond"></select></label>
-        <label class="f">Notes<input type="text" id="notes" placeholder="For example: reading, phone call practice"></label>
         <label class="check"><input type="checkbox" id="rec"> <span>Also save audio: your voice and the cue, as a WAV file</span></label>
+        <label class="check"><input type="checkbox" id="save"> <span>Save session files when I stop (a .zip download, or the chosen folder)</span></label>
         <div class="row" id="folderRow">
           <button class="btn" id="folderBtn" type="button">Choose save folder</button>
           <span class="small muted" id="folderMsg">No folder chosen. Files will download as a .zip.</span>
         </div>
-      </section>
+      </details>
 
-      <section class="panel" aria-labelledby="cueTitle">
-        <h2 id="cueTitle">Cue sound</h2>
+      <details class="panel fold" id="cueFold">
+        <summary><h2 id="cueTitle">Cue sound</h2></summary>
         <div class="two">
           <label class="f">Sound<select id="timbre"></select></label>
           <label class="f">Note<select id="note"></select></label>
@@ -176,21 +176,13 @@ code{font-family:var(--mono);font-size:.85em}
         <label class="f"><span class="lab">Fade after release <span class="val" id="relVal"></span></span><input type="range" id="rel" min="30" max="400" step="10"></label>
         <label class="f">Hold key<select id="trigger">
           <option value="space">Space bar</option>
+          <option value="lctrl">Left Ctrl</option>
+          <option value="lshift">Left Shift</option>
           <option value="any">Any key (foot pedals and clickers)</option>
         </select></label>
         <label class="check"><input type="checkbox" id="mute"> <span>Mute the cue. Presses are still logged, for comparison runs.</span></label>
-      </section>
+      </details>
 
-      <section class="panel" aria-labelledby="howTitle">
-        <h2 id="howTitle">Tips and saved files</h2>
-        <ul class="files">
-          <li>Use wired headphones. Bluetooth adds 100 ms or more, and speakers let the microphone hear the cue.</li>
-          <li>Audio delay: if the cue leaks into the microphone, MICE measures the round trip itself at the start of each session. If not, measure it once per headphone and microphone setup: hold an earbud against the microphone and press the button.</li>
-          <li>Each session saves <code>session.json</code> (settings and summary), <code>events.csv</code> (every press, release, voice start and end), <code>frames.csv</code> (loudness, pitch, voice and cue every 10 ms) and, if chosen, <code>audio.wav</code> (left: microphone, right: the cue as you heard it).</li>
-          <li>At the start of each session MICE plays a short hiss and the cue while you stay quiet. It learns how the cue leaks into the microphone and cancels that leak before detecting your voice. The WAV keeps the raw microphone.</li>
-          <li>Everything stays on your computer.</li>
-        </ul>
-      </section>
     </div>
   </div>
 </div>
@@ -211,7 +203,6 @@ const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A�
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const noteName = (m) => NAMES[m % 12] + (Math.floor(m / 12) - 1);
 const TIMBRES = [['piano', 'Soft piano'], ['epiano', 'Electric piano'], ['organ', 'Warm organ'], ['hum', 'Hum (voice-like)']];
-const CONDITIONS = ['MICE, per word', 'MICE, per syllable', 'MICE, per phrase', 'Taps with the cue muted', 'Voice only, no taps', 'Other'];
 const S = {
   timbre: store.get('timbre', 'piano'),
   note: Math.min(NOTE_HI, Math.max(NOTE_LO, store.get('note', 52))),
@@ -219,7 +210,7 @@ const S = {
   release: store.get('release', 120),
   muted: store.get('muted', false),
   trigger: store.get('trigger', 'space'),
-  condition: store.get('condition', CONDITIONS[0]),
+  save: store.get('save', !/iPad|iPhone|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)),
   record: store.get('record', true),
   mic: store.get('mic', ''),
   sens: 12,
@@ -234,16 +225,16 @@ fill($('timbre'), TIMBRES, S.timbre);
 const noteItems = [];
 for (let m = NOTE_LO; m <= NOTE_HI; m++) noteItems.push([String(m), noteName(m) + '  ·  ' + Math.round(hz(m)) + ' Hz']);
 fill($('note'), noteItems, String(S.note));
-fill($('cond'), CONDITIONS.map((c) => [c, c]), S.condition);
 $('trigger').value = S.trigger;
 $('mute').checked = S.muted;
 $('rec').checked = S.record;
+$('save').checked = S.save;
 $('vol').value = String(Math.round(S.volume * 100));
 $('rel').value = String(S.release);
 function showVals() {
   $('volVal').textContent = Math.round(S.volume * 100) + '%';
   $('relVal').textContent = S.release + ' ms';
-  $('padHint').textContent = S.trigger === 'space' ? 'Mouse, touch or space bar' : 'Mouse, touch or any key';
+  $('padHint').textContent = 'Mouse, touch or ' + ({ space: 'space bar', lctrl: 'left Ctrl', lshift: 'left Shift' }[S.trigger] || 'any key');
 }
 showVals();
 
@@ -257,10 +248,10 @@ $('vol').addEventListener('input', (e) => setSetting('volume', +e.target.value /
 $('rel').addEventListener('input', (e) => setSetting('release', +e.target.value));
 $('trigger').addEventListener('change', (e) => setSetting('trigger', e.target.value));
 $('mute').addEventListener('change', (e) => setSetting('muted', e.target.checked));
-$('cond').addEventListener('change', (e) => { S.condition = e.target.value; store.set('condition', S.condition); });
+$('save').addEventListener('change', (e) => { S.save = e.target.checked; store.set('save', S.save); showFolder(); });
 $('rec').addEventListener('change', (e) => { S.record = e.target.checked; store.set('record', S.record); });
 $('micSel').addEventListener('change', (e) => { S.mic = e.target.value; store.set('mic', S.mic); });
-['timbre', 'note', 'trigger', 'cond', 'micSel'].forEach((id) => $(id).addEventListener('change', (e) => e.target.blur()));
+['timbre', 'note', 'trigger', 'micSel'].forEach((id) => $(id).addEventListener('change', (e) => e.target.blur()));
 
 // ---------------- audio engine ----------------
 let ctx = null, out = null, cueBus = null, markBus = null, gateSrc = null, noiseBuf = null;
@@ -388,6 +379,8 @@ function release() {
   $('pad').classList.remove('on'); $('pad').setAttribute('aria-pressed', 'false');
 }
 const pad = $('pad');
+pad.addEventListener('selectstart', (e) => e.preventDefault());
+pad.addEventListener('dragstart', (e) => e.preventDefault());
 pad.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   try { pad.setPointerCapture(e.pointerId); } catch (err) { /* not supported */ }
@@ -402,6 +395,8 @@ pad.addEventListener('contextmenu', (e) => e.preventDefault());
 const NEVER = new Set(['Tab', 'Escape', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'ContextMenu', 'OS', 'F5', 'F11', 'F12']);
 function typing(target) { return !!(target && target.closest && target.closest('input[type="text"], textarea, select')); }
 function isTrigger(e) {
+  if (S.trigger === 'lctrl') return e.code === 'ControlLeft';
+  if (S.trigger === 'lshift') return e.code === 'ShiftLeft';
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (S.trigger === 'space') return e.code === 'Space' || e.key === ' ';
   return !NEVER.has(e.key);
@@ -824,7 +819,6 @@ function newSession(cap) {
   const startIdx = an.total;
   const s = {
     cap, id: stamp(new Date()), startedAt: new Date(), startIdx, T0: an.timeOf(startIdx),
-    condition: S.condition, notes: $('notes').value.trim(),
     toneAtStart: { sound: S.timbre, note: noteName(S.note), midi: S.note, hz: +hz(S.note).toFixed(2), volume: S.volume, release_ms: S.release, muted: S.muted, hold_key: S.trigger },
     record: S.record, audV: [], audC: [], audN: 0, audCapped: false,
     presses: [], segs: [], events: [], open: null,
@@ -984,6 +978,7 @@ const idb = {
   async set(k, v) { const db = await this.open(); return new Promise((res) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = () => res(true); tx.onerror = () => res(false); }); },
 };
 function showFolder() {
+  $('folderRow').hidden = !S.save;
   if (!fsOK) { $('folderBtn').hidden = true; $('folderMsg').textContent = 'Files download as a .zip when you stop. (Chrome or Edge can save straight to a folder.)'; return; }
   $('folderMsg').textContent = dirHandle ? 'Saving to the folder “' + dirHandle.name + '”.' : 'No folder chosen. Files will download as a .zip.';
   $('folderBtn').textContent = dirHandle ? 'Change folder' : 'Choose save folder';
@@ -1059,7 +1054,6 @@ function sessionMeta(s, sum, final) {
   return {
     app: 'MICE', version: 2, session: s.id, complete: final,
     started_at: s.startedAt.toISOString(), duration_s: +((capNow(s.cap) - s.T0)).toFixed(2),
-    condition: s.condition, notes: s.notes,
     cue_at_start: s.toneAtStart,
     audio: {
       context_sample_rate: ctx.sampleRate, analysis_sample_rate: s.cap.an.fs, wav_sample_rate: s.cap.an.fs,
@@ -1325,7 +1319,7 @@ async function startSession() {
   const btn = $('sesBtn');
   btn.disabled = true; $('delayBtn').disabled = true;
   try {
-    if (dirHandle) await ensurePerm(dirHandle);
+    if (S.save && dirHandle) await ensurePerm(dirHandle);
     setStatus('Allow microphone access if asked…');
     const cap = await openCapture();
     setStatus('Measuring room noise. Stay quiet for 2 seconds…');
@@ -1346,11 +1340,11 @@ async function startSession() {
     }
     session = newSession(cap);
     $('recBadge').classList.add('rec');
-    $('stNote').textContent = S.condition;
+    $('stNote').textContent = 'Session running.';
     btn.textContent = 'Stop and save'; btn.classList.remove('primary'); btn.classList.add('stop');
     setStatus('Recording. Hold the cue just before you voice.');
     renderStats();
-    if (dirHandle) autosave = setInterval(async () => { if (session) { try { await writeFiles(await buildFiles(session, false)); } catch (e) { /* retried next time */ } } }, 60000);
+    if (S.save && dirHandle) autosave = setInterval(async () => { if (session) { try { await writeFiles(await buildFiles(session, false)); } catch (e) { /* retried next time */ } } }, 60000);
   } catch (err) {
     closeCapture();
     if (!(err && err.message === 'stopped')) micError(err);
@@ -1377,7 +1371,9 @@ async function stopSession() {
     const files = await buildFiles(s, true);
     session = null;
     closeCapture();
-    if (dirHandle && await ensurePerm(dirHandle)) {
+    if (!S.save) {
+      msg = 'Session ended. Nothing was saved.';
+    } else if (dirHandle && await ensurePerm(dirHandle)) {
       await writeFiles(files);
       msg = 'Saved ' + files.length + ' files to “' + dirHandle.name + '”.';
     } else {
@@ -1397,7 +1393,7 @@ async function stopSession() {
   $('recBadge').classList.remove('rec'); $('recBadge').textContent = 'Saved';
   btn.textContent = 'Start session'; btn.classList.add('primary'); btn.classList.remove('stop');
   btn.disabled = false; $('delayBtn').disabled = false;
-  $('stNote').textContent = 'Last session: ' + s.condition;
+  $('stNote').textContent = 'Last session ended.';
 }
 $('sesBtn').addEventListener('click', (e) => {
   e.currentTarget.blur();
@@ -1505,6 +1501,13 @@ requestAnimationFrame(draw);
 })();
 window.addEventListener('beforeunload', (e) => { if (session) { e.preventDefault(); e.returnValue = ''; } });
 window.__mice = { summarize, get session() { return session; }, get capture() { return capture; }, get last() { return lastSession; } };
+
+// Collapsible panels: remembered per panel; closed by default on narrow screens so the pad stays in front.
+['sesFold', 'cueFold'].forEach((id) => {
+  const d = $(id);
+  d.open = store.get('open.' + id, window.innerWidth > 920);
+  d.addEventListener('toggle', () => store.set('open.' + id, d.open));
+});
 
 // ---------------- PWA: offline app shell (skipped on file://) ----------------
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
