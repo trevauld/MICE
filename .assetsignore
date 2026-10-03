@@ -10,3 +10,5 @@ tests
 node_modules
 MICE.html
 .wrangler
+README.md
+LICENSE
