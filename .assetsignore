@@ -9,3 +9,4 @@ make_icons.py
 tests
 node_modules
 MICE.html
+.wrangler
