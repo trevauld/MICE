@@ -9,7 +9,7 @@ const path = require('path');
   await p.goto('file://' + path.resolve(process.env.PAGE || path.join(__dirname, '..', 'index.html')));
   await p.selectOption('#timbre', 'dynamic');
   await p.click('#sesBtn');
-  await p.waitForFunction(() => document.getElementById('status').textContent.startsWith('Recording'), null, { timeout: 40000 });
+  await p.waitForFunction(() => document.getElementById('status').textContent.startsWith('Listening. Hold'), null, { timeout: 40000 });
   const before = await p.evaluate(() => window.__mice.tune);
   await p.waitForFunction(() => window.__mice.tune, null, { timeout: 30000 });
   const early = await p.evaluate(() => window.__mice.tune);          // ready at about 5.5 s of speech

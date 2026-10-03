@@ -8,7 +8,7 @@ const path = require('path');
   let p = await b.newPage({ viewport: { width: 1280, height: 800 } });
   const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(url);
-  res.removed = await p.evaluate(() => ['cond', 'notes', 'howTitle'].every((id) => !document.getElementById(id)) && !document.querySelector('h1,.lede'));
+  res.removed = await p.evaluate(() => ['cond', 'notes', 'howTitle', 'sLead', 'save', 'rec', 'delayBtn', 'folderBtn'].every((id) => !document.getElementById(id)) && !document.querySelector('h1,.lede'));
   const sw = require('fs').readFileSync(path.resolve(path.dirname(url.replace('file://', '')), 'sw.js'), 'utf8').match(/mice-v(\d+)/)[1];
   res.version = await p.evaluate((n) => document.getElementById('ver').textContent === 'MICE v' + n, sw);
   res.padFirst = await p.evaluate(() => document.querySelector('.wrap').children[1].querySelector('#pad') !== null);
