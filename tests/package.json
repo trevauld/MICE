@@ -1,0 +1,7 @@
+{
+  "name": "mice-tests",
+  "private": true,
+  "description": "Headless checks for MICE.html with a fake microphone",
+  "scripts": { "test": "bash suite.sh" },
+  "dependencies": { "playwright": "^1.63.0" }
+}

@@ -1,0 +1,1524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MICE</title>
+<meta name="theme-color" content="#0E1318">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MICE">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+/* Layout: the hold pad, live timeline and stats on the left; cue and session settings on the right. One column on narrow screens. */
+:root{
+  --bg:#EDF0F3;
+  --surface:#FFFFFF;
+  --ink:#16202A;
+  --muted:#596574;
+  --line:#D2D8E0;
+  --cue:#B5650F;
+  --cue-soft:#F7E6CF;
+  --on-cue:#FFFFFF;
+  --voice:#1E6CB0;
+  --voice-dim:#BAC6D3;
+  --warn:#8F5300;
+  --warn-soft:#FBEAD0;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0E1318;--surface:#161D25;--ink:#E4E9EF;--muted:#9AA5B4;--line:#2A333E;
+    --cue:#E79B3E;--cue-soft:#3A2913;--on-cue:#1B1006;--voice:#5BA3E8;--voice-dim:#34424F;
+    --warn:#E8AE55;--warn-soft:#33260F;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:24px clamp(16px,3vw,32px) 48px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:20px}
+header{display:grid;gap:2px}
+.eyebrow{margin:0;font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:var(--cue);font-weight:650}
+h1{margin:0;font-size:2.1rem;line-height:1.1;letter-spacing:-.01em}
+h2{margin:0;font-size:1rem;font-weight:650}
+.lede{margin:.35rem 0 0;color:var(--muted);max-width:74ch}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:20px;align-items:start}
+@media (max-width:920px){.grid{grid-template-columns:minmax(0,1fr)}}
+.col{display:grid;gap:16px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:grid;gap:12px;min-width:0}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.between{justify-content:space-between}
+.muted{color:var(--muted)}
+.small{font-size:.86rem}
+:focus-visible{outline:3px solid var(--voice);outline-offset:2px}
+
+.pad{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:100%;height:clamp(150px,26vh,230px);border:2px solid var(--line);border-radius:20px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;transition:background-color .06s,border-color .06s}
+.pad .big{font-size:2rem;font-weight:700;letter-spacing:.02em}
+.pad .hint{font-size:.9rem;color:var(--muted)}
+.pad.on{background:var(--cue);border-color:var(--cue);color:var(--on-cue)}
+.pad.on .hint{color:var(--on-cue)}
+
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--bg);color:var(--muted);font-variant-numeric:tabular-nums}
+.badge.rec{background:var(--warn-soft);color:var(--warn)}
+.badge.rec::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+canvas{display:block;width:100%;height:190px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.82rem;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:6px}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0}
+.stat{display:grid;gap:2px;padding:10px 12px;border-radius:10px;background:var(--bg);min-width:0}
+.stat dt{font-size:.74rem;color:var(--muted);letter-spacing:.02em}
+.stat dd{margin:0;font-family:var(--mono);font-size:1.15rem;font-weight:600;font-variant-numeric:tabular-nums}
+.stat dd.sub{font-family:var(--sans);font-size:.76rem;color:var(--muted);font-weight:400}
+
+label.f{display:grid;gap:4px;font-size:.82rem;color:var(--muted);font-weight:600}
+select,input[type="text"]{font:inherit;font-size:.95rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;min-height:38px;padding:.3em .55em;width:100%}
+input[type="range"]{width:100%;accent-color:var(--cue)}
+.check{display:flex;align-items:flex-start;gap:8px;font-size:.9rem}
+.check input{margin-top:3px;width:16px;height:16px;accent-color:var(--cue)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.val{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.lab{display:flex;justify-content:space-between;gap:8px}
+
+.btn{font:inherit;font-weight:600;font-size:.92rem;min-height:40px;padding:.45em 1em;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.btn.stop{background:var(--warn);border-color:var(--warn);color:var(--surface)}
+.status{margin:0;font-size:.88rem;min-height:1.3em}
+.status.warn{color:var(--warn)}
+.note{margin:0;padding:8px 12px;border-radius:8px;background:var(--warn-soft);color:var(--ink);font-size:.86rem}
+ul.files{margin:0;padding-left:1.1em;display:grid;gap:4px;font-size:.86rem}
+code{font-family:var(--mono);font-size:.85em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Manual choral cue</p>
+    <h1>MICE</h1>
+    <p class="lede">Hold the pad, or the space bar, just before you voice. A soft tone plays for as long as you hold. While a session is running, MICE also logs every press and your voice, so the timing can be studied later.</p>
+  </header>
+
+  <div class="grid">
+    <div class="col">
+      <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
+        <span class="big">Hold</span>
+        <span class="hint" id="padHint">Mouse, touch or space bar</span>
+      </button>
+
+      <section class="panel" aria-labelledby="tlTitle">
+        <div class="row between">
+          <h2 id="tlTitle">Last 8 seconds</h2>
+          <span class="badge" id="recBadge">Not recording</span>
+        </div>
+        <canvas id="tl" role="img" aria-label="Timeline of cue presses and voice loudness over the last 8 seconds"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--cue)"></i>Cue held</span>
+          <span><i style="background:var(--voice)"></i>Voice detected</span>
+          <span><i style="background:var(--voice-dim)"></i>Sound below the voice threshold</span>
+          <span>Numbers show how far the cue started before the voice</span>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="stTitle">
+        <div class="row between">
+          <h2 id="stTitle">This session</h2>
+          <span class="small muted" id="stNote">Start a session to collect data.</span>
+        </div>
+        <dl class="stats">
+          <div class="stat"><dt>Cue lead (median)</dt><dd id="sLead">–</dd><dd class="sub" id="sLeadSub">Cue start to voice start</dd></div>
+          <div class="stat"><dt>Voice starts with a cue</dt><dd id="sCov">–</dd><dd class="sub" id="sCovSub">After a pause</dd></div>
+          <div class="stat"><dt>Cues with no voice after</dt><dd id="sNoV">–</dd><dd class="sub">Within 1 second</dd></div>
+          <div class="stat"><dt>Presses · voice starts</dt><dd id="sCount">–</dd><dd class="sub" id="sDur">Hold · voice length</dd></div>
+        </dl>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" aria-labelledby="sesTitle">
+        <h2 id="sesTitle">Session</h2>
+        <div class="row">
+          <button class="btn primary" id="sesBtn" type="button">Start session</button>
+          <button class="btn" id="delayBtn" type="button">Measure audio delay</button>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+        <p class="small muted" id="delayMsg" style="margin:0"></p>
+        <p class="small muted" id="bleedMsg" style="margin:0"></p>
+        <p class="note" id="envNote" hidden></p>
+        <label class="f">Microphone<select id="micSel"><option value="">Default microphone</option></select></label>
+        <label class="f">Condition<select id="cond"></select></label>
+        <label class="f">Notes<input type="text" id="notes" placeholder="For example: reading, phone call practice"></label>
+        <label class="check"><input type="checkbox" id="rec"> <span>Also save audio: your voice and the cue, as a WAV file</span></label>
+        <div class="row" id="folderRow">
+          <button class="btn" id="folderBtn" type="button">Choose save folder</button>
+          <span class="small muted" id="folderMsg">No folder chosen. Files will download as a .zip.</span>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="cueTitle">
+        <h2 id="cueTitle">Cue sound</h2>
+        <div class="two">
+          <label class="f">Sound<select id="timbre"></select></label>
+          <label class="f">Note<select id="note"></select></label>
+        </div>
+        <div class="row">
+          <button class="btn" id="matchBtn" type="button">Match my voice</button>
+          <span class="small muted" id="matchMsg">Sets the note to your speaking pitch.</span>
+        </div>
+        <label class="f"><span class="lab">Volume <span class="val" id="volVal"></span></span><input type="range" id="vol" min="0" max="100" step="1"></label>
+        <label class="f"><span class="lab">Fade after release <span class="val" id="relVal"></span></span><input type="range" id="rel" min="30" max="400" step="10"></label>
+        <label class="f">Hold key<select id="trigger">
+          <option value="space">Space bar</option>
+          <option value="any">Any key (foot pedals and clickers)</option>
+        </select></label>
+        <label class="check"><input type="checkbox" id="mute"> <span>Mute the cue. Presses are still logged, for comparison runs.</span></label>
+      </section>
+
+      <section class="panel" aria-labelledby="howTitle">
+        <h2 id="howTitle">Tips and saved files</h2>
+        <ul class="files">
+          <li>Use wired headphones. Bluetooth adds 100 ms or more, and speakers let the microphone hear the cue.</li>
+          <li>Audio delay: if the cue leaks into the microphone, MICE measures the round trip itself at the start of each session. If not, measure it once per headphone and microphone setup: hold an earbud against the microphone and press the button.</li>
+          <li>Each session saves <code>session.json</code> (settings and summary), <code>events.csv</code> (every press, release, voice start and end), <code>frames.csv</code> (loudness, pitch, voice and cue every 10 ms) and, if chosen, <code>audio.wav</code> (left: microphone, right: the cue as you heard it).</li>
+          <li>At the start of each session MICE plays a short hiss and the cue while you stay quiet. It learns how the cue leaks into the microphone and cancels that leak before detecting your voice. The WAV keeps the raw microphone.</li>
+          <li>Everything stays on your computer.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------------- settings ----------------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('mice.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('mice.' + k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } },
+};
+const NOTE_LO = 40, NOTE_HI = 69; // E2 to A4
+const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+const noteName = (m) => NAMES[m % 12] + (Math.floor(m / 12) - 1);
+const TIMBRES = [['piano', 'Soft piano'], ['epiano', 'Electric piano'], ['organ', 'Warm organ'], ['hum', 'Hum (voice-like)']];
+const CONDITIONS = ['MICE, per word', 'MICE, per syllable', 'MICE, per phrase', 'Taps with the cue muted', 'Voice only, no taps', 'Other'];
+const S = {
+  timbre: store.get('timbre', 'piano'),
+  note: Math.min(NOTE_HI, Math.max(NOTE_LO, store.get('note', 52))),
+  volume: store.get('volume', 0.55),
+  release: store.get('release', 120),
+  muted: store.get('muted', false),
+  trigger: store.get('trigger', 'space'),
+  condition: store.get('condition', CONDITIONS[0]),
+  record: store.get('record', true),
+  mic: store.get('mic', ''),
+  sens: 12,
+};
+
+function fill(sel, items, value) {
+  sel.textContent = '';
+  items.forEach(([v, label]) => { const o = document.createElement('option'); o.value = v; o.textContent = label; sel.appendChild(o); });
+  sel.value = value;
+}
+fill($('timbre'), TIMBRES, S.timbre);
+const noteItems = [];
+for (let m = NOTE_LO; m <= NOTE_HI; m++) noteItems.push([String(m), noteName(m) + '  ·  ' + Math.round(hz(m)) + ' Hz']);
+fill($('note'), noteItems, String(S.note));
+fill($('cond'), CONDITIONS.map((c) => [c, c]), S.condition);
+$('trigger').value = S.trigger;
+$('mute').checked = S.muted;
+$('rec').checked = S.record;
+$('vol').value = String(Math.round(S.volume * 100));
+$('rel').value = String(S.release);
+function showVals() {
+  $('volVal').textContent = Math.round(S.volume * 100) + '%';
+  $('relVal').textContent = S.release + ' ms';
+  $('padHint').textContent = S.trigger === 'space' ? 'Mouse, touch or space bar' : 'Mouse, touch or any key';
+}
+showVals();
+
+function setSetting(key, value) {
+  S[key] = value; store.set(key, value); showVals(); applyOut();
+  if (session) session.event('settings', key + '=' + value);
+}
+$('timbre').addEventListener('change', (e) => setSetting('timbre', e.target.value));
+$('note').addEventListener('change', (e) => setSetting('note', +e.target.value));
+$('vol').addEventListener('input', (e) => setSetting('volume', +e.target.value / 100));
+$('rel').addEventListener('input', (e) => setSetting('release', +e.target.value));
+$('trigger').addEventListener('change', (e) => setSetting('trigger', e.target.value));
+$('mute').addEventListener('change', (e) => setSetting('muted', e.target.checked));
+$('cond').addEventListener('change', (e) => { S.condition = e.target.value; store.set('condition', S.condition); });
+$('rec').addEventListener('change', (e) => { S.record = e.target.checked; store.set('record', S.record); });
+$('micSel').addEventListener('change', (e) => { S.mic = e.target.value; store.set('mic', S.mic); });
+['timbre', 'note', 'trigger', 'cond', 'micSel'].forEach((id) => $(id).addEventListener('change', (e) => e.target.blur()));
+
+// ---------------- audio engine ----------------
+let ctx = null, out = null, cueBus = null, markBus = null, gateSrc = null, noiseBuf = null;
+const waves = {};
+function audio() {
+  if (!ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ctx = new AC({ latencyHint: 'interactive' });
+    out = ctx.createGain(); out.gain.value = S.muted ? 0 : S.volume; out.connect(ctx.destination);
+    cueBus = ctx.createGain(); cueBus.gain.value = 1; cueBus.connect(out);
+    markBus = ctx.createGain(); markBus.gain.value = 1; // timing gate, recorded but never played
+    gateSrc = ctx.createConstantSource(); gateSrc.offset.value = 0; gateSrc.connect(markBus); gateSrc.start();
+    noiseBuf = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.06), ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    waves.bright = makeWave((n) => 1 / Math.pow(n, 1.15), 14);
+    waves.mellow = makeWave((n) => 1 / Math.pow(n, 2.1), 8);
+    waves.organ = makeWave((n) => [0, 1, 0.55, 0.28, 0.14, 0.07][n] || 0, 5);
+  }
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+function makeWave(fn, N) {
+  const re = new Float32Array(N + 1), im = new Float32Array(N + 1);
+  for (let n = 1; n <= N; n++) im[n] = fn(n);
+  return ctx.createPeriodicWave(re, im);
+}
+function applyOut() {
+  if (!out) return;
+  out.gain.setTargetAtTime(S.muted ? 0 : S.volume, ctx.currentTime, 0.015);
+}
+const LEVEL = { piano: 0.5, epiano: 0.42, organ: 0.3, hum: 0.55 };
+
+// Start one cue at context time t. The cue sustains until stopCue.
+function startCue(t) {
+  const c = ctx, f0 = hz(S.note), kind = S.timbre, L = LEVEL[kind] || 0.4;
+  const amp = c.createGain(); amp.gain.value = 0;
+  const rel = c.createGain(); rel.gain.value = 1;
+  amp.connect(rel); rel.connect(cueBus);
+  const srcs = [];
+  const osc = (type, f, det) => { const o = c.createOscillator(); if (typeof type === 'string') o.type = type; else o.setPeriodicWave(type); o.frequency.value = f; if (det) o.detune.value = det; srcs.push(o); return o; };
+  if (kind === 'piano') {
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.4;
+    lp.frequency.setValueAtTime(Math.min(5200, f0 * 22), t);
+    lp.frequency.setTargetAtTime(Math.min(1900, f0 * 9), t + 0.01, 0.35);
+    lp.connect(amp);
+    const gB = c.createGain(), gM = c.createGain();
+    gB.gain.setValueAtTime(0, t); gB.gain.linearRampToValueAtTime(0.7, t + 0.004); gB.gain.setTargetAtTime(0, t + 0.004, 0.32);
+    gM.gain.setValueAtTime(0, t); gM.gain.linearRampToValueAtTime(0.6, t + 0.006); gM.gain.setTargetAtTime(0.42, t + 0.006, 0.8);
+    gB.connect(lp); gM.connect(lp);
+    osc(waves.bright, f0, -1.3).connect(gB);
+    osc(waves.bright, f0, 1.3).connect(gB);
+    osc(waves.mellow, f0, 0.4).connect(gM);
+    const nz = c.createBufferSource(); nz.buffer = noiseBuf; srcs.push(nz);
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = Math.min(2600, Math.max(700, f0 * 7)); bp.Q.value = 0.9;
+    const gn = c.createGain(); gn.gain.setValueAtTime(0.08, t); gn.gain.exponentialRampToValueAtTime(0.0005, t + 0.03);
+    nz.connect(bp); bp.connect(gn); gn.connect(amp);
+    amp.gain.setValueAtTime(L, t);
+  } else if (kind === 'epiano') {
+    const car = osc('sine', f0), mod = osc('sine', f0), sub = osc('sine', f0);
+    const mg = c.createGain(); mg.gain.setValueAtTime(f0 * 2.4, t); mg.gain.setTargetAtTime(f0 * 0.3, t, 0.45);
+    mod.connect(mg); mg.connect(car.frequency);
+    const sg = c.createGain(); sg.gain.value = 0.35; sub.connect(sg);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = Math.min(3000, f0 * 14); lp.Q.value = 0.3;
+    car.connect(lp); sg.connect(lp); lp.connect(amp);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(L, t + 0.003); amp.gain.setTargetAtTime(L * 0.55, t + 0.003, 0.7);
+  } else if (kind === 'organ') {
+    const g2 = c.createGain(); g2.gain.value = 0.5;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = Math.min(2400, f0 * 10);
+    osc(waves.organ, f0).connect(lp);
+    osc(waves.organ, f0, 4).connect(g2); g2.connect(lp);
+    lp.connect(amp);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(L, t + 0.015);
+  } else {
+    const o = osc('sawtooth', f0), vib = osc('sine', 5.2);
+    const vg = c.createGain(); vg.gain.value = f0 * 0.004; vib.connect(vg); vg.connect(o.frequency);
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.7;
+    const f1 = c.createBiquadFilter(); f1.type = 'peaking'; f1.frequency.value = 450; f1.Q.value = 2; f1.gain.value = 8;
+    o.connect(lp); lp.connect(f1); f1.connect(amp);
+    amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(L, t + 0.03);
+  }
+  srcs.forEach((s) => s.start(t));
+  return { rel, srcs };
+}
+function stopCue(v, t) {
+  const r = Math.max(0.03, S.release / 1000);
+  v.rel.gain.setValueAtTime(1, t);
+  v.rel.gain.setTargetAtTime(0, t, r / 3);
+  const end = t + r * 1.6 + 0.05;
+  v.srcs.forEach((s) => { try { s.stop(end); } catch (e) { /* already stopped */ } });
+  setTimeout(() => { try { v.rel.disconnect(); } catch (e) { /* gone */ } }, Math.max(0, (end - ctx.currentTime) * 1000) + 300);
+}
+// The marker channel is a gate: 1 while the cue is held, 0.5 during a calibration click, 0 otherwise.
+// A value change scheduled slightly in the past still lands on the first sample the engine renders,
+// which is the same sample the cue itself starts on.
+function gate(t, val) { gateSrc.offset.setValueAtTime(val, t); }
+function clickAt(t) {
+  const o = ctx.createOscillator(); o.frequency.value = 1000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.6, t + 0.001); g.gain.linearRampToValueAtTime(0, t + 0.008);
+  o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + 0.03);
+}
+
+// ---------------- holding the cue ----------------
+let cue = null, pointerHeld = false;
+const held = new Set();
+const livePresses = []; // context times, for the timeline
+function press() {
+  audio();
+  if (cue) return;
+  const t = ctx.currentTime;
+  cue = startCue(t);
+  gate(t, 1);
+  if (!capture) addLivePress({ down: t, up: null, ctx: true });
+  $('pad').classList.add('on'); $('pad').setAttribute('aria-pressed', 'true');
+}
+function addLivePress(p) { livePresses.push(p); if (livePresses.length > 400) livePresses.splice(0, livePresses.length - 400); }
+function release() {
+  if (!cue) return;
+  const t = ctx.currentTime;
+  stopCue(cue, t);
+  gate(t, 0);
+  cue = null;
+  const p = livePresses[livePresses.length - 1]; if (p && p.ctx && p.up == null) p.up = t;
+  $('pad').classList.remove('on'); $('pad').setAttribute('aria-pressed', 'false');
+}
+const pad = $('pad');
+pad.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  try { pad.setPointerCapture(e.pointerId); } catch (err) { /* not supported */ }
+  pointerHeld = true; press();
+});
+const pointerUp = () => { if (!pointerHeld) return; pointerHeld = false; if (!held.size) release(); };
+pad.addEventListener('pointerup', pointerUp);
+pad.addEventListener('pointercancel', pointerUp);
+pad.addEventListener('lostpointercapture', pointerUp);
+pad.addEventListener('contextmenu', (e) => e.preventDefault());
+
+const NEVER = new Set(['Tab', 'Escape', 'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'ContextMenu', 'OS', 'F5', 'F11', 'F12']);
+function typing(target) { return !!(target && target.closest && target.closest('input[type="text"], textarea, select')); }
+function isTrigger(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (S.trigger === 'space') return e.code === 'Space' || e.key === ' ';
+  return !NEVER.has(e.key);
+}
+document.addEventListener('keydown', (e) => {
+  if (typing(e.target) || !isTrigger(e)) return;
+  e.preventDefault();
+  if (e.repeat) return;
+  held.add(e.code || e.key);
+  press();
+}, true);
+document.addEventListener('keyup', (e) => {
+  const k = e.code || e.key;
+  if (!held.has(k)) { if (!typing(e.target) && isTrigger(e)) e.preventDefault(); return; }
+  e.preventDefault();
+  held.delete(k);
+  if (!held.size && !pointerHeld) release();
+}, true);
+function releaseAll() { held.clear(); pointerHeld = false; release(); }
+window.addEventListener('blur', releaseAll);
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
+
+// ---------------- microphone capture and analysis ----------------
+const WORKLET = `
+class MiceCapture extends AudioWorkletProcessor {
+  constructor() { super(); this.size = 512; this.n = 0; this.alloc(); this.t0 = 0; this.on = true;
+    this.port.onmessage = (e) => { if (e.data === 'stop') this.on = false; }; }
+  alloc() { this.v = new Float32Array(this.size); this.c = new Float32Array(this.size); this.m = new Float32Array(this.size); }
+  process(inputs) {
+    const a = inputs[0] && inputs[0][0], b = inputs[1] && inputs[1][0], d = inputs[2] && inputs[2][0];
+    const len = a ? a.length : (b ? b.length : (d ? d.length : 128));
+    if (this.n === 0) this.t0 = currentTime;
+    for (let i = 0; i < len; i++) { this.v[this.n + i] = a ? a[i] : 0; this.c[this.n + i] = b ? b[i] : 0; this.m[this.n + i] = d ? d[i] : 0; }
+    this.n += len;
+    if (this.n >= this.size) {
+      this.port.postMessage({ t0: this.t0, v: this.v, c: this.c, m: this.m }, [this.v.buffer, this.c.buffer, this.m.buffer]);
+      this.alloc(); this.n = 0;
+    }
+    return this.on;
+  }
+}
+registerProcessor('mice-capture', MiceCapture);`;
+
+let capture = null, workletReady = false;
+const forceScript = /[?&]capture=script\b/.test(location.search);
+// Test-only switches: ?simbleed=0.08&simdelay=20 mixes the cue into the microphone path (&simodd=1 distorts it);
+// ?nocomp=1 turns compensation off.
+const qp = new URLSearchParams(location.search);
+const SIM = { gain: +qp.get('simbleed') || 0, delay: +qp.get('simdelay') || 20, odd: qp.get('simodd') === '1' };
+const NOCOMP = qp.get('nocomp') === '1';
+const KLEAK = 4; // subtract four times the predicted bleed power (6 dB safety margin)
+async function loadWorklet(c) {
+  const urls = ['data:text/javascript;base64,' + btoa(WORKLET)];
+  try { urls.push(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }))); } catch (e) { /* no blob URLs */ }
+  for (const u of urls) { try { await c.audioWorklet.addModule(u); return true; } catch (e) { /* try the next way */ } }
+  return false;
+}
+
+function makeAnalyzer(sr) {
+  const dec = Math.max(1, Math.round(sr / 16000));
+  const fs = sr / dec;
+  const hop = Math.round(fs * 0.01), win = hop * 2, pwin = hop * 4;
+  const RING = 1 << 17, MASK = RING - 1;
+  const ring = new Float32Array(RING);      // microphone after bleed cancellation (used for analysis)
+  const rawRing = new Float32Array(RING);   // microphone as recorded
+  const refRing = new Float32Array(RING);   // cue as heard
+  let canc = null;                          // { h, dLo, D, g, minP, pf, lf }: FIR model of the cue-to-microphone path, gain g
+  let wS = -1, wE = -1, wOk = false, wxy = 0, wyy = 0, wxx = 0; // gain check window after each cue start
+  const pbuf = new Float32Array(pwin), R = new Float32Array(pwin);
+  let total = 0, T0 = null, accV = 0, accC = 0, accM = 0, accN = 0, since = 0, cueSq = 0;
+  let gHigh = false, clickK = -1, clickArm = true;
+  const A = {
+    fs, dec, hop, onFrame: null, onAudio: null, onMarker: null,
+    get total() { return total; },
+    timeOf(k) { return T0 + k / fs; },
+    indexOf(t) { return Math.round((t - T0) * fs); },
+    sample(k) { return (k < 0 || k >= total || k <= total - RING) ? 0 : ring[k & MASK]; },
+    raw(k) { return (k < 0 || k >= total || k <= total - RING) ? 0 : rawRing[k & MASK]; },
+    ref(k) { return (k < 0 || k >= total || k <= total - RING) ? 0 : refRing[k & MASK]; },
+    setCanceller(c) { canc = c; wE = -1; },
+    cancGain() { return canc ? canc.g : null; },
+    gainPending() { return wE >= 0; },
+    // At each cue start: if you were not already speaking, check the gain on the first 30 ms of bleed,
+    // before your voice is expected (you press first, then voice).
+    armGain(k, ok) {
+      if (!canc) return;
+      wS = k + canc.D + Math.round(0.005 * fs); wE = wS + Math.round(0.03 * fs); wOk = ok; wxy = 0; wyy = 0; wxx = 0;
+    },
+    push(t0, v, c, mk) {
+      if (T0 === null) T0 = t0;
+      const k0 = total;
+      const ov = new Int16Array(Math.floor((v.length + accN) / dec)), oc = new Int16Array(ov.length);
+      let m = 0;
+      for (let i = 0; i < v.length; i++) {
+        accV += v[i]; accC += c[i]; accM += mk ? mk[i] : 0; accN++;
+        if (accN === dec) {
+          const x = accV / dec, y = accC / dec, mv = accM / dec;
+          accV = 0; accC = 0; accM = 0; accN = 0;
+          const k = total;
+          rawRing[k & MASK] = x; refRing[k & MASK] = y;
+          let xc = x;
+          if (canc) {
+            const h = canc.h, base = k - canc.dLo;
+            let e = 0;
+            for (let i = 0; i < h.length; i++) e += h[i] * refRing[(base - i) & MASK];
+            if (k >= wS && k < wE) { wxy += x * e; wyy += e * e; wxx += x * x; if (k === wE - 1) checkGain(); }
+            xc = x - canc.g * e;
+          }
+          ring[k & MASK] = xc; total++;
+          if (!gHigh && mv > 0.75) { gHigh = true; clickK = -1; clickArm = false; if (A.onMarker) A.onMarker('press', k); }
+          else if (gHigh && mv < 0.75) { gHigh = false; if (A.onMarker) A.onMarker('release', k); }
+          if (!gHigh) {
+            if (mv <= 0.25) { if (clickK >= 0 && A.onMarker) A.onMarker('click', clickK); clickK = -1; clickArm = true; }
+            else if (clickArm && clickK < 0) clickK = k;
+          }
+          cueSq += y * y;
+          if (m < ov.length) { ov[m] = to16(x); oc[m] = to16(y); m++; }
+          if (++since === hop) { since = 0; frame(cueSq / hop, gHigh); cueSq = 0; }
+        }
+      }
+      if (A.onAudio && m) A.onAudio(ov.subarray(0, m), oc.subarray(0, m), k0);
+    },
+    pitch(end) {
+      if (end < pwin) return 0;
+      let mean = 0;
+      for (let i = 0; i < pwin; i++) { const x = ring[(end - pwin + i) & MASK]; pbuf[i] = x; mean += x; }
+      mean /= pwin;
+      for (let i = 0; i < pwin; i++) pbuf[i] -= mean;
+      const minL = Math.max(2, Math.floor(fs / 420)), maxL = Math.min(Math.floor(pwin / 2), Math.ceil(fs / 65));
+      let best = 0;
+      for (let L = minL; L <= maxL; L++) {
+        let num = 0, e1 = 0, e2 = 0;
+        for (let i = 0; i + L < pwin; i++) { const a = pbuf[i], b = pbuf[i + L]; num += a * b; e1 += a * a; e2 += b * b; }
+        const r = num / Math.sqrt(e1 * e2 + 1e-12);
+        R[L] = r; if (r > best) best = r;
+      }
+      if (best < 0.5) return 0;
+      let pick = -1;
+      for (let L = minL + 1; L < maxL; L++) {
+        if (R[L] >= R[L - 1] && R[L] >= R[L + 1] && R[L] >= 0.88 * best) { pick = L; break; }
+      }
+      if (pick < 0) return 0;
+      const a = R[pick - 1], b = R[pick], cc = R[pick + 1];
+      const den = a - 2 * b + cc;
+      const shift = den !== 0 ? 0.5 * (a - cc) / den : 0;
+      return fs / (pick + Math.max(-0.5, Math.min(0.5, shift)));
+    },
+  };
+  // Follow changes in how loud the bleed is (for example the computer's own volume keys), using the window
+  // armed at a cue start. It counts only if the microphone there holds nothing but bleed and room noise
+  // (plus the model error seen at the start), so your voice never moves the gain.
+  function checkGain() {
+    const n = wE - wS, p = wyy / n, xx = wxx / n;
+    wE = -1;
+    if (!wOk || !(p > canc.minP)) return;
+    const expl = (wxy * wxy) / wyy / n;            // power explained by the bleed at its best gain
+    const unexpl = Math.max(xx - expl, 0);         // the rest: room noise, model error, anything else
+    if (unexpl > 2 * (canc.pf + canc.lf * expl)) return;
+    const g0 = canc.g;
+    canc.g = Math.max(0, Math.min(4, wxy / wyy));
+    if (Math.abs(canc.g - g0) > 0.12 * Math.max(g0, 0.05)) { recancel(); if (A.onGainChange) A.onGainChange(); }
+  }
+  // Redo the cancelling of the last few tens of milliseconds with the new gain.
+  function recancel() {
+    const from = Math.max(wS - Math.round(0.03 * fs), total - RING + 1, 0), h = canc.h, g = canc.g;
+    for (let k = from; k < total; k++) {
+      const base = k - canc.dLo;
+      let e = 0;
+      for (let i = 0; i < h.length; i++) e += h[i] * refRing[(base - i) & MASK];
+      ring[k & MASK] = rawRing[k & MASK] - g * e;
+    }
+  }
+  function frame(cueMs, held) {
+    const end = total;
+    if (end < win) return;
+    let s = 0, sr = 0;
+    for (let k = end - win; k < end; k++) { const x = ring[k & MASK], r = rawRing[k & MASK]; s += x * x; sr += r * r; }
+    const db = 10 * Math.log10(s / win + 1e-12), rawDb = 10 * Math.log10(sr / win + 1e-12);
+    if (A.onFrame) A.onFrame(A.timeOf(end - win / 2), rawDb, db, cueMs, end, held);
+  }
+  return A;
+}
+function to16(x) { const y = Math.max(-1, Math.min(1, x)); return Math.round(y * 32767); }
+function median(arr) { if (!arr.length) return null; const a = Float64Array.from(arr).sort(); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
+function quantile(arr, q) { if (!arr.length) return null; const a = Float64Array.from(arr).sort(); const p = (a.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p); return a[lo] + (a[hi] - a[lo]) * (p - lo); }
+
+const HN = 2048; // frames of live history (about 20 s)
+async function openCapture() {
+  const c = audio();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('nomedia');
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+    deviceId: S.mic ? { exact: S.mic } : undefined,
+    echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+  } });
+  const src = c.createMediaStreamSource(stream);
+  const sink = c.createGain(); sink.gain.value = 0; sink.connect(c.destination);
+  const an = makeAnalyzer(c.sampleRate);
+  let node, mode = 'worklet', merger = null;
+  try {
+    if (forceScript || !c.audioWorklet) throw new Error('script path');
+    if (!workletReady) { workletReady = await loadWorklet(c); if (!workletReady) throw new Error('worklet failed'); }
+    node = new AudioWorkletNode(c, 'mice-capture', { numberOfInputs: 3, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers' });
+    node.port.onmessage = (e) => an.push(e.data.t0, e.data.v, e.data.c, e.data.m);
+    src.connect(node, 0, 0); out.connect(node, 0, 1); markBus.connect(node, 0, 2); node.connect(sink);
+  } catch (err) {
+    mode = 'script';
+    merger = c.createChannelMerger(3);
+    src.connect(merger, 0, 0); out.connect(merger, 0, 1); markBus.connect(merger, 0, 2);
+    node = c.createScriptProcessor(1024, 3, 1);
+    node.onaudioprocess = (e) => {
+      const ib = e.inputBuffer;
+      an.push(e.playbackTime - ib.duration, ib.getChannelData(0).slice(0), ib.getChannelData(1).slice(0), ib.getChannelData(2).slice(0));
+    };
+    merger.connect(node); node.connect(sink);
+  }
+  let sim = null;
+  if (SIM.gain > 0) {
+    const dl = c.createDelay(1); dl.delayTime.value = SIM.delay / 1000;
+    const sg = c.createGain(); sg.gain.value = SIM.gain;
+    out.connect(dl);
+    if (SIM.odd) { // ring-modulated bleed: follows the cue but does not match its waveform
+      const rm = c.createGain(); rm.gain.value = 0;
+      const lfo = c.createOscillator(); lfo.frequency.value = 37; lfo.connect(rm.gain); lfo.start();
+      dl.connect(rm); rm.connect(sg);
+    } else dl.connect(sg);
+    sg.connect(mode === 'worklet' ? node : merger, 0, 0);
+    sim = { dl, sg };
+  }
+  const track = stream.getAudioTracks()[0];
+  const cap = {
+    stream, src, node, sink, merger, an, mode,
+    label: track ? track.label : '',
+    trackSettings: track && track.getSettings ? track.getSettings() : {},
+    fc: 0,
+    hist: { t: new Float64Array(HN), db: new Float32Array(HN), v: new Uint8Array(HN), f0: new Float32Array(HN) },
+    V: { state: 'cal', cal: [], calFrames: 150, floor: -60, run: 0, cand: 0, candFc: 0, qrun: 0, candEnd: 0 },
+    segOpen: null, lastOff: -1e9, clicks: [], sim,
+    ref: new Float32Array(HN), raw: new Float32Array(HN), bleed: null,
+  };
+  an.onFrame = (t, rawDb, cancDb, cueMs, end, held) => onFrame(cap, t, rawDb, cancDb, cueMs, end, held);
+  an.onMarker = (type, k) => onMarker(cap, type, k);
+  // The bleed got louder or quieter and the gain was corrected: the frames since this cue started held
+  // only bleed and room noise (checked), so drop any half-started voice detection made from them.
+  an.onGainChange = () => {
+    const V = cap.V;
+    if (V.state === 'quiet') V.run = 0;
+    for (let i = cap.fc - 1; i >= 0 && i > cap.fc - HN; i--) { const j = i % HN; if (cap.hist.t[j] < cap.gainFrom) break; if (cap.hist.db[j] > V.floor) cap.hist.db[j] = V.floor; }
+  };
+  an.onAudio = (v, cc, k0) => { if (session && session.cap === cap) session.onAudio(v, cc, k0); };
+  capture = cap;
+  listMics();
+  return cap;
+}
+function closeCapture() {
+  const cap = capture;
+  if (!cap) return;
+  capture = null;
+  try { if (cap.mode === 'worklet') cap.node.port.postMessage('stop'); } catch (e) { /* ignore */ }
+  try { cap.src.disconnect(); } catch (e) { /* ignore */ }
+  try { out.disconnect(cap.mode === 'worklet' ? cap.node : cap.merger); } catch (e) { /* ignore */ }
+  if (cap.sim) { try { out.disconnect(cap.sim.dl); cap.sim.sg.disconnect(); } catch (e) { /* ignore */ } }
+  try { markBus.disconnect(cap.mode === 'worklet' ? cap.node : cap.merger); } catch (e) { /* ignore */ }
+  try { cap.node.disconnect(); cap.sink.disconnect(); } catch (e) { /* ignore */ }
+  cap.stream.getTracks().forEach((t) => t.stop());
+}
+async function listMics() {
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+    const items = [['', 'Default microphone']].concat(devs.filter((d) => d.deviceId && d.deviceId !== 'default').map((d, i) => [d.deviceId, d.label || 'Microphone ' + (i + 1)]));
+    fill($('micSel'), items, items.some((x) => x[0] === S.mic) ? S.mic : '');
+  } catch (e) { /* ignore */ }
+}
+
+// Press, release and click times, read from the recorded marker channel (same clock as the voice).
+function onMarker(cap, type, k) {
+  const t = cap.an.timeOf(k);
+  if (type === 'press') {
+    cap.an.armGain(k, cap.V.state !== 'voice'); cap.gainFrom = t;
+    addLivePress({ down: t, up: null });
+    if (session && session.cap === cap && !session.stopping) session.onPress(t);
+  } else if (type === 'release') {
+    for (let i = livePresses.length - 1; i >= 0; i--) { const p = livePresses[i]; if (!p.ctx && p.up == null) { p.up = t; break; } }
+    if (session && session.cap === cap) session.onRelease(t);
+  } else cap.clicks.push(k);
+}
+function capNow(cap) { return cap.an.total > 0 ? cap.an.timeOf(cap.an.total) : ctx.currentTime; }
+
+// Largest cue power (as heard) among frames center-r..center+r.
+function refMax(cap, center, r) {
+  let m = 0;
+  const lo = Math.max(center - r, cap.fc - HN + 1, 0), hi = Math.min(center + r, cap.fc);
+  for (let i = lo; i <= hi; i++) { const x = cap.ref[i % HN]; if (x > m) m = x; }
+  return m;
+}
+// Predicted cue bleed power in the microphone for frame index f.
+function leakAt(cap, f, r) {
+  const B = cap.bleed;
+  if (NOCOMP || !B || !(B.G > 0)) return 0;
+  return B.G * refMax(cap, f - B.dFrames, Math.max(r, B.rFrames || 1));
+}
+
+// One analysis frame every 10 ms: loudness, pitch, voice detection.
+// Voice detection works on clean_db: the microphone after cancelling the cue bleed,
+// minus a safety margin for any bleed left over.
+function onFrame(cap, t, rawDb, cancDb, cueMs, end, held) {
+  const V = cap.V;
+  const fc = cap.fc;
+  const j = fc % HN;
+  cap.ref[j] = cueMs; cap.raw[j] = rawDb;
+  let db = cancDb;
+  if (V.state !== 'cal') {
+    const leak = leakAt(cap, fc, 1);
+    if (leak > 0) {
+      const pf = Math.pow(10, V.floor / 10);
+      db = 10 * Math.log10(Math.max(Math.pow(10, cancDb / 10) - KLEAK * leak, pf));
+    }
+  }
+  let f0 = 0;
+  if (V.state !== 'cal' && V.state !== 'hold' && db > V.floor + 6) f0 = cap.an.pitch(end);
+  if (V.state === 'cal') {
+    if (cueMs < 1e-9) V.cal.push(db);
+    if (V.cal.length >= V.calFrames) { V.floor = median(V.cal); V.state = 'quiet'; V.cal = null; }
+  } else if (V.state === 'hold') {
+    // measuring the cue bleed: no voice detection, floor kept as measured
+  } else {
+    const onTh = V.floor + S.sens, offTh = V.floor + S.sens - 4;
+    if (V.state === 'quiet') {
+      if (db > onTh) {
+        if (V.run === 0) { V.cand = t; V.candFc = fc; }
+        V.run++;
+        if (V.run >= 3 && !cap.an.gainPending()) { // wait for the bleed gain check at a cue start
+          V.state = 'voice'; V.run = 0; V.qrun = 0;
+          let on = V.cand, i = V.candFc;
+          for (let k = 0; k < 4 && i - 1 >= 0 && i - 1 > cap.fc - HN; k++) {
+            const j = (i - 1) % HN;
+            if (cap.hist.db[j] > V.floor + 6) { on = cap.hist.t[j]; i--; } else break;
+          }
+          voiceOn(cap, on);
+        }
+      } else {
+        V.run = 0;
+        if (db < V.floor) V.floor += 0.1 * (db - V.floor);
+        else if (db < V.floor + 3) V.floor += 0.005 * (db - V.floor);
+      }
+    } else if (db < offTh) {
+      if (V.qrun === 0) V.candEnd = t;
+      V.qrun++;
+      if (V.qrun >= 12) { V.state = 'quiet'; V.qrun = 0; voiceOff(cap, V.candEnd); }
+    } else V.qrun = 0;
+  }
+  const vad = V.state === 'voice' ? 1 : 0;
+  cap.hist.t[j] = t; cap.hist.db[j] = db; cap.hist.v[j] = vad; cap.hist.f0[j] = f0;
+  cap.fc++;
+  if (session && session.cap === cap) session.onFrame(t, rawDb, db, f0, vad, held ? 1 : 0, cueMs, cap.an.cancGain());
+}
+function fixHist(cap, fromT, val) {
+  for (let i = cap.fc - 1; i >= 0 && i > cap.fc - HN; i--) { const j = i % HN; if (cap.hist.t[j] < fromT) break; cap.hist.v[j] = val; }
+}
+// Sharpen a voice start from the 10 ms frame grid to the sample stream: find where a 2.5 ms
+// loudness window first rises above the noise floor + 6 dB and stays there.
+function refineOnset(cap, t) {
+  const an = cap.an, fs = an.fs;
+  const last = cap.fc - 1;
+  const fT = last - Math.round((cap.hist.t[last % HN] - t) / 0.01);
+  const leak = leakAt(cap, fT, 3);
+  const w = Math.max(4, Math.round((leak > 0 ? 0.006 : 0.0025) * fs));
+  const thr = Math.pow(10, (cap.V.floor + 6) / 10) + KLEAK * leak;
+  const kc = an.indexOf(t);
+  const k0 = kc - Math.round(0.025 * fs), k1 = Math.min(an.total - 1, kc + Math.round(0.025 * fs));
+  if (k1 - k0 < w) return t;
+  const ms = new Float64Array(k1 - k0 + 1);
+  let sum = 0;
+  for (let k = k0 - w + 1; k <= k0; k++) { const x = an.sample(k); sum += x * x; }
+  ms[0] = sum / w;
+  for (let k = k0 + 1; k <= k1; k++) { const a = an.sample(k), b = an.sample(k - w); sum += a * a - b * b; ms[k - k0] = sum / w; }
+  if (ms[ms.length - 1] <= thr) return t;
+  let i = ms.length - 1;
+  while (i > 0 && ms[i - 1] > thr) i--;
+  if (i === 0) return t;
+  return an.timeOf(k0 + i - w / 2);
+}
+const liveSegs = [], livePairs = [];
+function voiceOn(cap, on) {
+  on = refineOnset(cap, on);
+  cap.segOpen = on;
+  fixHist(cap, on, 1);
+  if (session && session.cap === cap) session.fixVad(on, 1);
+  // label the timeline with the cue lead
+  let pick = null;
+  for (let i = livePresses.length - 1; i >= 0; i--) {
+    const p = livePresses[i];
+    if (p.down <= on && on - p.down <= 0.8 && p.down >= cap.lastOff - 0.1) { pick = p; break; }
+  }
+  if (!pick) for (const p of livePresses) { if (p.down > on && p.down - on <= 0.2) { pick = p; break; } }
+  if (pick) { livePairs.push({ down: pick.down, on }); if (livePairs.length > 100) livePairs.shift(); }
+}
+function voiceOff(cap, off) {
+  const on = cap.segOpen; cap.segOpen = null;
+  if (on == null) return;
+  if (off - on < 0.06) {
+    fixHist(cap, on, 0);
+    if (session && session.cap === cap) session.fixVad(on, 0);
+    for (let i = livePairs.length - 1; i >= 0; i--) if (livePairs[i].on === on) livePairs.splice(i, 1);
+    return;
+  }
+  fixHist(cap, off, 0);
+  cap.lastOff = off;
+  liveSegs.push({ on, off }); if (liveSegs.length > 200) liveSegs.shift();
+  if (session && session.cap === cap) { session.fixVad(off, 0); session.onSegment(on, off); }
+}
+
+// ---------------- sessions ----------------
+let session = null;
+function stamp(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '_' + p(d.getHours()) + '-' + p(d.getMinutes()) + '-' + p(d.getSeconds());
+}
+function newSession(cap) {
+  const an = cap.an;
+  const startIdx = an.total;
+  const s = {
+    cap, id: stamp(new Date()), startedAt: new Date(), startIdx, T0: an.timeOf(startIdx),
+    condition: S.condition, notes: $('notes').value.trim(),
+    toneAtStart: { sound: S.timbre, note: noteName(S.note), midi: S.note, hz: +hz(S.note).toFixed(2), volume: S.volume, release_ms: S.release, muted: S.muted, hold_key: S.trigger },
+    record: S.record, audV: [], audC: [], audN: 0, audCapped: false,
+    presses: [], segs: [], events: [], open: null,
+    fr: { t: [], db: [], clean: [], f0: [], v: [], held: [], cue: [], g: [] },
+  };
+  s.rel = (ct) => (ct - s.T0) * 1000;
+  s.event = (type, detail, tms) => { s.events.push({ t: tms == null ? s.rel(capNow(cap)) : tms, type, detail: detail == null ? '' : String(detail) }); };
+  s.onPress = (ct) => { const r = s.rel(ct); s.open = { down: r, up: null }; s.event('press', '', r); };
+  s.onRelease = (ct) => {
+    if (!s.open) return;
+    const r = s.rel(ct); s.open.up = r; s.presses.push(s.open);
+    s.event('release', 'hold_ms=' + Math.round(r - s.open.down), r); s.open = null;
+  };
+  s.onFrame = (t, db, clean, f0, v, held, cueMs, g) => {
+    if (t < s.T0) return;
+    s.fr.t.push(s.rel(t)); s.fr.db.push(db); s.fr.clean.push(clean); s.fr.f0.push(f0); s.fr.v.push(v); s.fr.held.push(held); s.fr.cue.push(cueMs); s.fr.g.push(g);
+  };
+  s.fixVad = (fromCt, val) => {
+    const from = s.rel(fromCt);
+    for (let i = s.fr.t.length - 1; i >= 0 && s.fr.t[i] >= from; i--) s.fr.v[i] = val;
+  };
+  s.onSegment = (onCt, offCt) => {
+    if (offCt <= s.T0) return;
+    const a = Math.max(0, s.rel(onCt)), b = s.rel(offCt);
+    s.segs.push({ on: a, off: b });
+    s.event('voice_on', '', a); s.event('voice_off', 'dur_ms=' + Math.round(b - a), b);
+  };
+  s.onAudio = (v, c, k0) => {
+    if (!s.record || s.audCapped) return;
+    let off = 0;
+    if (k0 < s.startIdx) { off = s.startIdx - k0; if (off >= v.length) return; }
+    s.audV.push(v.slice(off)); s.audC.push(c.slice(off)); s.audN += v.length - off;
+    if (s.audN > an.fs * 3600) { s.audCapped = true; s.event('note', 'audio recording stopped at 60 minutes'); }
+  };
+  s.event('session_start', 'condition=' + s.condition, 0);
+  return s;
+}
+
+// Pair each voice start (after a pause) with the cue press that came just before it.
+function summarize(presses, segs, rt) {
+  const P = presses.filter((p) => p.up != null).slice().sort((a, b) => a.down - b.down);
+  const used = new Uint8Array(P.length);
+  const pairs = [];
+  let prevOff = -Infinity;
+  for (const s of segs) {
+    let pick = -1;
+    for (let i = P.length - 1; i >= 0; i--) {
+      if (used[i] || P[i].down > s.on) continue;
+      if (s.on - P[i].down > 800) break;
+      if (P[i].down >= prevOff - 100) { pick = i; break; }
+    }
+    if (pick < 0) for (let i = 0; i < P.length; i++) { if (!used[i] && P[i].down > s.on && P[i].down - s.on <= 200) { pick = i; break; } }
+    if (pick >= 0) { used[pick] = 1; pairs.push({ press_ms: +P[pick].down.toFixed(1), voice_ms: +s.on.toFixed(1), lead_ms: +(s.on - P[pick].down).toFixed(1) }); }
+    prevOff = s.off;
+  }
+  let noVoice = 0;
+  for (const p of P) { if (!segs.some((s) => s.on <= p.down + 1000 && s.off >= p.down)) noVoice++; }
+  const leads = pairs.map((p) => p.lead_ms);
+  const lead = median(leads);
+  return {
+    presses: P.length, voice_starts: segs.length, voice_starts_with_cue: pairs.length,
+    coverage: segs.length ? pairs.length / segs.length : null,
+    lead_median_ms: lead, lead_q1_ms: quantile(leads, 0.25), lead_q3_ms: quantile(leads, 0.75),
+    round_trip_delay_ms: rt, lead_median_after_delay_ms: lead != null && rt != null ? lead - rt : null,
+    cues_without_voice: noVoice,
+    hold_median_ms: median(P.map((p) => p.up - p.down)),
+    voice_median_ms: median(segs.map((s) => s.off - s.on)),
+    pairs,
+  };
+}
+
+function fmtMs(x) { return x == null ? '–' : Math.round(x) + ' ms'; }
+function renderStats() {
+  const s = session || lastSession;
+  if (!s) return;
+  const sum = summarize(s.presses, s.segs, rtFor(s.cap));
+  $('sLead').textContent = sum.lead_median_ms == null ? '–' : (sum.lead_median_ms >= 0 ? '+' : '') + Math.round(sum.lead_median_ms) + ' ms';
+  $('sLeadSub').textContent = sum.lead_median_after_delay_ms != null
+    ? 'About ' + Math.round(sum.lead_median_after_delay_ms) + ' ms after audio delay'
+    : (sum.lead_q1_ms != null ? 'Middle half: ' + Math.round(sum.lead_q1_ms) + ' to ' + Math.round(sum.lead_q3_ms) + ' ms' : 'Cue start to voice start');
+  $('sCov').textContent = sum.coverage == null ? '–' : Math.round(sum.coverage * 100) + '%';
+  $('sCovSub').textContent = sum.voice_starts ? sum.voice_starts_with_cue + ' of ' + sum.voice_starts + ', after a pause' : 'After a pause';
+  $('sNoV').textContent = String(sum.cues_without_voice);
+  $('sCount').textContent = sum.presses + ' · ' + sum.voice_starts;
+  $('sDur').textContent = 'Hold ' + fmtMs(sum.hold_median_ms) + ' · voice ' + fmtMs(sum.voice_median_ms);
+}
+setInterval(() => {
+  if (session) {
+    renderStats();
+    const secs = Math.max(0, Math.round(capNow(session.cap) - session.T0));
+    $('recBadge').textContent = 'Recording ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+  }
+}, 500);
+
+// ---------------- audio delay ----------------
+function rtInfo() { return store.get('rt', null); }
+function rtMs() { const r = rtInfo(); return r ? r.ms : null; }
+// Round trip for a session. When the cue bleeds into the microphone, the bleed's path delay measured at
+// session start is that round trip (headphone delay + microphone delay) for the current setup; otherwise
+// use the click measurement.
+function bleedRt(cap) { const b = cap && cap.bleed; return b && b.delayMs != null && b.match >= 0.3 ? b.delayMs : null; }
+function rtFor(cap) { const b = bleedRt(cap); return b != null ? b : rtMs(); }
+function showRt() {
+  const r = rtInfo();
+  if (!r) { $('delayMsg').textContent = 'Audio delay not measured yet.'; return; }
+  const d = new Date(r.at);
+  $('delayMsg').textContent = 'Audio delay (round trip): ' + Math.round(r.ms) + ' ms, measured ' + d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + (r.n ? ' from ' + r.n + ' clicks' : '') + '.';
+}
+showRt();
+async function measureDelay() {
+  if (session) return;
+  const btn = $('delayBtn');
+  btn.disabled = true; $('sesBtn').disabled = true;
+  let opened = false;
+  setStatus('Hold an earbud against the microphone. Playing six clicks…');
+  try {
+    if (!capture) { await openCapture(); opened = true; await sleep(500); }
+    const an = capture.an;
+    capture.clicks = [];
+    const start = ctx.currentTime + 0.3, gap = 0.6;
+    for (let i = 0; i < 6; i++) { clickAt(start + i * gap); gate(start + i * gap, 0.5); gate(start + i * gap + 0.02, 0); }
+    await sleep((start + 6 * gap + 0.4 - ctx.currentTime) * 1000);
+    const found = [];
+    for (const k0 of capture.clicks) {
+      let ns = 0, nn = 0;
+      for (let k = k0 - Math.round(0.1 * an.fs); k < k0; k++) { const x = an.raw(k); ns += x * x; nn++; }
+      const thr = Math.max(8 * Math.sqrt(ns / Math.max(1, nn)), 0.004);
+      const kEnd = k0 + Math.round(0.55 * an.fs);
+      for (let k = k0; k < kEnd; k++) { if (Math.abs(an.raw(k)) > thr) { found.push(((k - k0) / an.fs) * 1000); break; } }
+    }
+    if (found.length >= 4) {
+      const ms = median(found);
+      store.set('rt', { ms, n: found.length, at: Date.now(), mic: capture.label });
+      showRt();
+      setStatus(ms > 120
+        ? 'Measured ' + Math.round(ms) + ' ms. That is long: if you use Bluetooth headphones, switch to wired ones.'
+        : 'Measured ' + Math.round(ms) + ' ms. Lead times will now also show the corrected value.', ms > 120);
+      renderStats();
+    } else {
+      setStatus('The microphone did not pick up the clicks. Hold an earbud right against the microphone, or switch to speakers for this step, then try again.', true);
+    }
+  } catch (err) {
+    micError(err);
+  } finally {
+    if (opened) closeCapture();
+    btn.disabled = false; $('sesBtn').disabled = false;
+  }
+}
+$('delayBtn').addEventListener('click', (e) => { e.currentTarget.blur(); measureDelay(); });
+
+// ---------------- saving ----------------
+let dirHandle = null;
+const fsOK = typeof window.showDirectoryPicker === 'function';
+const idb = {
+  open() { return new Promise((res, rej) => { const r = indexedDB.open('mice', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+  async get(k) { const db = await this.open(); return new Promise((res) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); },
+  async set(k, v) { const db = await this.open(); return new Promise((res) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = () => res(true); tx.onerror = () => res(false); }); },
+};
+function showFolder() {
+  if (!fsOK) { $('folderBtn').hidden = true; $('folderMsg').textContent = 'Files download as a .zip when you stop. (Chrome or Edge can save straight to a folder.)'; return; }
+  $('folderMsg').textContent = dirHandle ? 'Saving to the folder “' + dirHandle.name + '”.' : 'No folder chosen. Files will download as a .zip.';
+  $('folderBtn').textContent = dirHandle ? 'Change folder' : 'Choose save folder';
+}
+async function ensurePerm(h) {
+  try {
+    if ((await h.queryPermission({ mode: 'readwrite' })) === 'granted') return true;
+    return (await h.requestPermission({ mode: 'readwrite' })) === 'granted';
+  } catch (e) { return false; }
+}
+if (fsOK) idb.get('dir').then((h) => { if (h) { dirHandle = h; showFolder(); } }).catch(() => { /* ignore */ });
+showFolder();
+$('folderBtn').addEventListener('click', async (e) => {
+  e.currentTarget.blur();
+  try {
+    const h = await window.showDirectoryPicker({ id: 'mice', mode: 'readwrite' });
+    dirHandle = h; showFolder();
+    try { await idb.set('dir', h); } catch (err) { /* not persisted */ }
+  } catch (err) { /* cancelled */ }
+});
+
+function csvEvents(s) {
+  const rows = ['t_ms,event,detail'];
+  s.events.slice().sort((a, b) => a.t - b.t).forEach((e) => rows.push(e.t.toFixed(1) + ',' + e.type + ',' + (/[",\n]/.test(e.detail) ? '"' + e.detail.replace(/"/g, '""') + '"' : e.detail)));
+  return new Blob([rows.join('\n') + '\n'], { type: 'text/csv' });
+}
+function csvFrames(s) {
+  const f = s.fr, parts = ['t_ms,level_db,clean_db,pitch_hz,voice,held,cue_db,cancel_gain\n'];
+  let chunk = [];
+  for (let i = 0; i < f.t.length; i++) {
+    const c = f.cue[i];
+    chunk.push(f.t[i].toFixed(1) + ',' + f.db[i].toFixed(1) + ',' + f.clean[i].toFixed(1) + ',' + Math.round(f.f0[i]) + ',' + f.v[i] + ',' + f.held[i] + ',' + (c > 1e-12 ? (10 * Math.log10(c)).toFixed(1) : '') + ',' + (f.g[i] == null ? '' : f.g[i].toFixed(3)));
+    if (chunk.length === 5000) { parts.push(chunk.join('\n') + '\n'); chunk = []; }
+  }
+  if (chunk.length) parts.push(chunk.join('\n') + '\n');
+  return new Blob(parts, { type: 'text/csv' });
+}
+function wavStereo(V, C, n, fs) {
+  const head = new DataView(new ArrayBuffer(44));
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) head.setUint8(o + i, str.charCodeAt(i)); };
+  w(0, 'RIFF'); head.setUint32(4, 36 + n * 4, true); w(8, 'WAVE'); w(12, 'fmt ');
+  head.setUint32(16, 16, true); head.setUint16(20, 1, true); head.setUint16(22, 2, true);
+  head.setUint32(24, fs, true); head.setUint32(28, fs * 4, true); head.setUint16(32, 4, true); head.setUint16(34, 16, true);
+  w(36, 'data'); head.setUint32(40, n * 4, true);
+  const parts = [head.buffer];
+  for (let i = 0; i < V.length; i++) {
+    const v = V[i], c = C[i], buf = new Int16Array(v.length * 2);
+    for (let j = 0; j < v.length; j++) { buf[2 * j] = v[j]; buf[2 * j + 1] = c[j]; }
+    parts.push(buf.buffer);
+  }
+  return new Blob(parts, { type: 'audio/wav' });
+}
+// What the start-of-session bleed measurement found, and the filter used to cancel it.
+function bleedMeta(b) {
+  if (!b) return null;
+  const r = (x, d) => (x == null ? null : +x.toFixed(d));
+  return {
+    level_above_room_db: r(b.beforeDb, 1),
+    after_cancelling_db: r(b.afterDb, 1),
+    path_delay_ms: r(b.delayMs, 2),
+    match: r(b.match, 2),
+    cancelling: b.filter ? (NOCOMP ? 'off (test switch)' : 'on') : 'not used',
+    attempts: b.attempts, other_sound_during_measurement: b.otherSound,
+    leftover_allowance: b.G > 0 && !NOCOMP ? 'clean_db also subtracts 4x the leftover bleed predicted from cue_db' : 'none',
+    filter: b.filter ? {
+      taps: Array.from(b.filter, (x) => +x.toPrecision(6)), start_sample: b.dLo, rate_hz: b.fs,
+      apply_as: 'clean[n] = mic[n] - cancel_gain * sum over i of taps[i] * cue[n - start_sample - i], using the two WAV channels and cancel_gain from frames.csv',
+    } : null,
+    measured_with: { sound: b.sound, note: b.note, volume: b.volume },
+  };
+}
+function sessionMeta(s, sum, final) {
+  return {
+    app: 'MICE', version: 2, session: s.id, complete: final,
+    started_at: s.startedAt.toISOString(), duration_s: +((capNow(s.cap) - s.T0)).toFixed(2),
+    condition: s.condition, notes: s.notes,
+    cue_at_start: s.toneAtStart,
+    audio: {
+      context_sample_rate: ctx.sampleRate, analysis_sample_rate: s.cap.an.fs, wav_sample_rate: s.cap.an.fs,
+      wav_channels: ['microphone (raw)', 'cue as heard (after volume and mute)'],
+      wav_saved: !!(s.record && s.audN), capture_mode: s.cap.mode,
+      base_latency_ms: ctx.baseLatency != null ? +(ctx.baseLatency * 1000).toFixed(2) : null,
+      output_latency_ms: ctx.outputLatency != null ? +(ctx.outputLatency * 1000).toFixed(2) : null,
+      round_trip_delay: rtInfo(), round_trip_from_bleed_ms: bleedRt(s.cap) == null ? null : +bleedRt(s.cap).toFixed(2),
+      round_trip_used_ms: rtFor(s.cap) == null ? null : +rtFor(s.cap).toFixed(2),
+      round_trip_source: bleedRt(s.cap) != null ? 'cue bleed path at session start' : rtMs() != null ? 'click measurement' : null,
+      microphone: s.cap.label, mic_settings: s.cap.trackSettings,
+    },
+    cue_bleed: bleedMeta(s.cap.bleed),
+    frame_columns: { level_db: 'raw microphone level', clean_db: 'level after cancelling the cue bleed and allowing for any left over (used for voice detection)', held: 'cue key or pad held', cue_db: 'level of the cue as heard (empty when silent)', cancel_gain: 'gain applied to the bleed filter, which follows volume changes (empty when not cancelling)' },
+    voice_detection: { floor_db: +s.cap.V.floor.toFixed(1), on_threshold_db: +(s.cap.V.floor + S.sens).toFixed(1), off_threshold_db: +(s.cap.V.floor + S.sens - 4).toFixed(1), min_pause_ms: 120, min_voice_ms: 60, frame_ms: 10 },
+    timing_notes: 'Times are ms from session start, all read from one recorded stream: presses and releases come from a gate channel recorded alongside the microphone, so leads are sample-accurate within the recording. Voice times include the microphone delay and cue times exclude the headphone delay; subtract audio.round_trip_used_ms from a lead to estimate the lead you actually heard. When the cue bleeds into the microphone, cue_bleed.path_delay_ms measures that same round trip at session start.',
+    summary: sum,
+    user_agent: navigator.userAgent,
+  };
+}
+async function writeFiles(files) {
+  for (const f of files) {
+    const fh = await dirHandle.getFileHandle(f.name, { create: true });
+    const wr = await fh.createWritable();
+    await wr.write(f.blob); await wr.close();
+  }
+}
+async function buildFiles(s, final) {
+  const sum = summarize(s.presses, s.segs, rtFor(s.cap));
+  const base = 'mice_' + s.id + '_';
+  const files = [
+    { name: base + 'session.json', blob: new Blob([JSON.stringify(sessionMeta(s, sum, final), null, 2)], { type: 'application/json' }) },
+    { name: base + 'events.csv', blob: csvEvents(s) },
+    { name: base + 'frames.csv', blob: csvFrames(s) },
+  ];
+  if (final && s.record && s.audN) files.push({ name: base + 'audio.wav', blob: wavStereo(s.audV, s.audC, s.audN, Math.round(s.cap.an.fs)) });
+  return files;
+}
+// Minimal store-only ZIP writer.
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+async function zipBlob(files) {
+  const d = new Date();
+  const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  const parts = [], central = [];
+  let offset = 0;
+  for (const f of files) {
+    const data = new Uint8Array(await f.blob.arrayBuffer());
+    const name = new TextEncoder().encode(f.name);
+    const crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(lh.buffer, name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+    ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, name.length, true);
+    ch.setUint16(30, 0, true); ch.setUint16(32, 0, true); ch.setUint16(34, 0, true); ch.setUint16(36, 0, true); ch.setUint32(38, 0, true); ch.setUint32(42, offset, true);
+    central.push(ch.buffer, name);
+    offset += 30 + name.length + data.length;
+  }
+  let cdSize = 0; central.forEach((c) => { cdSize += c.byteLength; });
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob(parts.concat(central, [end.buffer]), { type: 'application/zip' });
+}
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 120000);
+}
+
+// ---------------- start and stop ----------------
+let lastSession = null, autosave = null, busy = false;
+function setStatus(msg, warn) { $('status').textContent = msg || ''; $('status').classList.toggle('warn', !!warn); }
+function micError(err) {
+  if (err && err.message === 'nomedia') setStatus('This browser cannot use the microphone here. Open this file in Chrome or Edge.', true);
+  else if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) setStatus('Microphone access was blocked. Allow it from the icon in the address bar, then try again.', true);
+  else if (err && err.name === 'NotFoundError') setStatus('No microphone was found. Plug one in and try again.', true);
+  else if (err && err.name === 'OverconstrainedError') { setStatus('The chosen microphone is not available. Pick another one or the default.', true); S.mic = ''; store.set('mic', ''); }
+  else setStatus('The microphone could not start' + (err && err.message ? ': ' + err.message : '.'), true);
+}
+// A short soft hiss through the headphones: broadband, so the cue-to-microphone path can be learned at all pitches.
+function playProbe(t, dur) {
+  const n = Math.round(ctx.sampleRate * (dur + 0.05));
+  const b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource(); src.buffer = b;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.3, t + 0.01);
+  g.gain.setValueAtTime(0.3, t + dur - 0.01); g.gain.linearRampToValueAtTime(0, t + dur);
+  src.connect(lp); lp.connect(g); g.connect(cueBus);
+  src.start(t); src.stop(t + dur + 0.04);
+}
+// Solve A x = b for a symmetric positive-definite A (row-major, n x n) by Cholesky.
+function solveSPD(A, b, n) {
+  const L = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let v = A[i * n + j];
+      for (let k = 0; k < j; k++) v -= L[i * n + k] * L[j * n + k];
+      if (i === j) { if (!(v > 0)) return null; L[i * n + i] = Math.sqrt(v); } else L[i * n + j] = v / L[j * n + j];
+    }
+  }
+  const y = new Float64Array(n), x = new Float64Array(n);
+  for (let i = 0; i < n; i++) { let v = b[i]; for (let k = 0; k < i; k++) v -= L[i * n + k] * y[k]; y[i] = v / L[i * n + i]; }
+  for (let i = n - 1; i >= 0; i--) { let v = y[i]; for (let k = i + 1; k < n; k++) v -= L[k * n + i] * x[k]; x[i] = v / L[i * n + i]; }
+  return x;
+}
+// One bleed measurement, while the user stays quiet: a hiss gives the path delay (cross-correlation),
+// a least-squares filter models the path, and 10 ms blocks give robust levels for the hiss, the cue,
+// and the silent gaps around them (to spot speech or other sound during the measurement).
+async function bleedAttempt(cap) {
+  const an = cap.an, fs = an.fs;
+  let calcStart = 0;
+  const t0 = ctx.currentTime + 0.08, probeDur = 0.5, lagS = 0.4, cueDur = 0.6;
+  playProbe(t0, probeDur);
+  const tc = t0 + probeDur + lagS + 0.05;
+  const v = startCue(tc); stopCue(v, tc + cueDur);
+  await sleep((tc + cueDur + 0.3 + lagS - ctx.currentTime) * 1000);
+  if (capture !== cap) return null;
+  calcStart = performance.now();
+  const maxLag = Math.round(lagS * fs), L = Math.round(0.006 * fs), pre = Math.round(0.001 * fs);
+  const kS = Math.max(an.total - Math.round(5 * fs), an.indexOf(t0) - Math.round(0.1 * fs)), kE = an.total - 1;
+  const N = kE - kS + 1, yOff = maxLag + L + 8;
+  const X = new Float64Array(N), Y = new Float64Array(N + yOff);
+  for (let i = 0; i < N; i++) X[i] = an.raw(kS + i);
+  for (let i = -yOff; i < N; i++) Y[i + yOff] = an.ref(kS + i);
+  const pf = Math.pow(10, cap.V.floor / 10);
+  // 1) delay, from the hiss: a coarse search on 4x-decimated signals, then a fine one around the peak
+  const pS = Math.max(0, an.indexOf(t0) - kS), pE = Math.min(N - 1, an.indexOf(t0 + probeDur) - kS + maxLag);
+  const corrAt = (d) => {
+    let num = 0, ex = 0, ey = 0;
+    for (let n = pS; n <= pE; n++) { const x = X[n], y = Y[n - d + yOff]; num += x * y; ex += x * x; ey += y * y; }
+    return ex > 0 && ey > 0 ? Math.abs(num) / Math.sqrt(ex * ey) : 0;
+  };
+  const q = 4, nC = Math.floor((pE - pS + 1) / q), cOff = Math.ceil(maxLag / q) + 1;
+  const Xc = new Float64Array(nC), Yc = new Float64Array(nC + cOff);
+  for (let i = 0; i < nC; i++) { let a = 0; for (let j = 0; j < q; j++) a += X[pS + i * q + j]; Xc[i] = a; }
+  for (let m = -cOff; m < nC; m++) { let a = 0; for (let j = 0; j < q; j++) a += Y[pS + m * q + j + yOff]; Yc[m + cOff] = a; }
+  let ecx = 0; for (let i = 0; i < nC; i++) ecx += Xc[i] * Xc[i];
+  let cBest = -1, dc = 0;
+  for (let d = 0; d * q <= maxLag; d++) {
+    let num = 0, ey = 0;
+    for (let i = 0; i < nC; i++) { const y = Yc[i - d + cOff]; num += Xc[i] * y; ey += y * y; }
+    const c = ecx > 0 && ey > 0 ? Math.abs(num) / Math.sqrt(ecx * ey) : 0;
+    if (c > cBest) { cBest = c; dc = d; }
+  }
+  let best = 0, D = 0;
+  for (let d = Math.max(0, dc * q - 2 * q); d <= Math.min(maxLag, dc * q + 2 * q); d++) { const c = corrAt(d); if (c > best) { best = c; D = d; } }
+  // 2) least-squares filter around the delay (autocorrelation method; the cue is silent at both ends)
+  const dLo = Math.max(0, D - pre);
+  const r = new Float64Array(L);
+  for (let m = 0; m < L; m++) { let v2 = 0; for (let n = 0; n + m < N + yOff; n++) v2 += Y[n] * Y[n + m]; r[m] = v2; }
+  const R = new Float64Array(L * L);
+  for (let i = 0; i < L; i++) for (let j = 0; j < L; j++) R[i * L + j] = r[Math.abs(i - j)];
+  for (let i = 0; i < L; i++) R[i * L + i] += 1e-3 * r[0] + 1e-12;
+  const pv = new Float64Array(L);
+  for (let i = 0; i < L; i++) { let v2 = 0; for (let n = 0; n < N; n++) v2 += X[n] * Y[n - dLo - i + yOff]; pv[i] = v2; }
+  const h = r[0] > 0 ? solveSPD(R, pv, L) : null;
+  // 3) 10 ms block levels: raw, after cancelling, predicted bleed, cue (at the path delay)
+  const B = Math.round(0.01 * fs), seg = { probe: [], cue: [], gap: [], all: [] };
+  const Dseg = best >= 0.15 ? D : 0; // without a match the delay is unknown; assume a short one
+  const refT = (n) => an.timeOf(kS + n) - Dseg / fs; // cue time that reaches the microphone at sample n
+  for (let n0 = 0; n0 + B <= N; n0 += B) {
+    let xp = 0, ep = 0, hp = 0, yp = 0;
+    for (let n = n0; n < n0 + B; n++) {
+      let yh = 0;
+      if (h) for (let i = 0; i < L; i++) yh += h[i] * Y[n - dLo - i + yOff];
+      const yy = n - Dseg >= -yOff ? Y[n - Dseg + yOff] : 0;
+      xp += X[n] * X[n]; ep += (X[n] - yh) * (X[n] - yh); hp += yh * yh; yp += yy * yy;
+    }
+    const b = { xp: xp / B, ep: ep / B, hp: hp / B, yp: yp / B };
+    const ta = refT(n0), tb = refT(n0 + B);
+    seg.all.push(b);
+    if (ta >= t0 + 0.03 && tb <= t0 + probeDur - 0.03) seg.probe.push(b);
+    else if (ta >= tc + 0.03 && tb <= tc + cueDur) seg.cue.push(b);
+    else if (tb <= t0 - 0.02 || (ta >= t0 + probeDur + 0.06 && tb <= tc - 0.02) || ta >= tc + cueDur + 0.3) seg.gap.push(b);
+  }
+  const med = (arr, k) => median(arr.map((b) => b[k])) || 0;
+  const S2 = {};
+  for (const k of ['probe', 'cue', 'gap', 'all']) S2[k] = { xp: med(seg[k], 'xp'), ep: med(seg[k], 'ep'), hp: med(seg[k], 'hp'), yp: med(seg[k], 'yp') };
+  const db = (p) => 10 * Math.log10(Math.max(p, pf) / pf);
+  const beforeDb = db(S2.cue.xp), afterDb = db(S2.cue.ep), gapDb = db(S2.gap.xp);
+  const found = best >= 0.15 && beforeDb >= 3;
+  // Other sound (speech, noise) shows up in the silent gaps, or as a lot left over after cancelling:
+  // more than a tenth of the predicted bleed and 6 dB above room noise, in the hiss or in the cue.
+  const rho = (q) => Math.max(q.ep - pf, 0) / Math.max(q.hp, 1e-20);
+  const probeResDb = db(S2.probe.ep);
+  let dirtyGap = gapDb >= 6, dirtyLeft = false;
+  if (found) dirtyLeft = (afterDb >= 6 && rho(S2.cue) > 0.1) || (probeResDb >= 6 && rho(S2.probe) > 0.1);
+  else if (Math.max(db(S2.all.xp), beforeDb, db(S2.probe.xp)) >= 6) dirtyGap = true;
+  return { best, D, dLo, h, L, fs, pf, found, beforeDb, afterDb, gapDb, probeResDb, dirtyGap, dirty: dirtyGap || dirtyLeft, cue: S2.cue, calcMs: performance.now() - calcStart };
+}
+// Measure the cue bleed (once more if other sound got in the way) and set up cancelling.
+async function measureBleed(cap) {
+  const an = cap.an;
+  an.setCanceller(null); cap.bleed = null;
+  if (cap.segOpen != null) voiceOff(cap, capNow(cap));
+  cap.V.state = 'hold';
+  const A1 = await bleedAttempt(cap);
+  if (!A1) { cap.V.state = 'quiet'; return; }
+  let A = A1, A2 = null, tries = 1;
+  if (A1.dirty) {
+    setStatus('Some other sound was picked up. Measuring again, please stay quiet…');
+    A2 = await bleedAttempt(cap);
+    if (!A2) { cap.V.state = 'quiet'; return; }
+    tries = 2;
+    // keep the cleaner of the two: less sound in the gaps, then less left over during the cue
+    if (!A2.dirty || A2.gapDb < A1.gapDb - 3 || (Math.abs(A2.gapDb - A1.gapDb) <= 3 && A2.afterDb <= A1.afterDb)) A = A2;
+  }
+  // The same leftover twice, with quiet gaps both times: that is the path itself, not other sound.
+  if (A2 && A.dirty && A1.found && A2.found && !A1.dirtyGap && !A2.dirtyGap
+    && Math.abs(A1.afterDb - A2.afterDb) <= 3 && Math.abs(A1.probeResDb - A2.probeResDb) <= 3) A.dirty = false;
+  const { found, beforeDb, afterDb, pf } = A;
+  const useCanc = found && !!A.h && afterDb <= beforeDb - 1;
+  const filter = useCanc ? Float32Array.from(A.h) : null;
+  const lf = Math.max(A.cue.ep - pf, 0) / Math.max(A.cue.hp, 1e-20); // leftover as a fraction of the bleed
+  if (filter && !NOCOMP) an.setCanceller({ h: filter, dLo: A.dLo, D: A.D, g: 1, minP: 4 * pf, pf, lf: Math.min(lf, 1) });
+  const resDb = useCanc ? afterDb : beforeDb;
+  // Both times: sound only while the cue plays, but no match with the cue. That is bleed that cannot be modelled.
+  const cueOnly = (q) => !q.found && q.beforeDb >= 6 && q.gapDb < 3;
+  const odd = !found && !!A2 && cueOnly(A1) && cueOnly(A2);
+  if (odd) A.dirty = false;
+  // G: leftover bleed power per unit of cue power; voice detection allows 4x this (6 dB margin)
+  let G = 0;
+  if ((found || odd) && resDb >= 3 && A.cue.yp > 0) G = Math.max((useCanc ? A.cue.ep : A.cue.xp) - pf, 0) / A.cue.yp;
+  cap.bleed = {
+    beforeDb, afterDb: useCanc ? afterDb : null, delayMs: found ? A.D / A.fs * 1000 : null, match: A.best,
+    filter, dLo: A.dLo, G, dFrames: found ? Math.round(A.D / A.fs / 0.01) : 20, rFrames: found ? 1 : 20, fs: A.fs,
+    attempts: tries, otherSound: A.dirty, calcMs: A.calcMs, sound: S.timbre, note: noteName(S.note), volume: S.volume,
+  };
+  cap.V.state = 'quiet'; cap.V.run = 0; cap.V.qrun = 0; cap.segOpen = null;
+  const x = Math.round(beforeDb), z = Math.round(resDb);
+  $('envNote').hidden = true;
+  let msg;
+  if (!found && !odd && A.dirty) msg = 'Cue bleed could not be measured because the microphone picked up other sound at the same time. If you were speaking, stop and start again, staying quiet for the first few seconds.';
+  else if (!found && !odd) msg = 'Cue bleed into the microphone: none detected.';
+  else if (useCanc && resDb < 3) msg = 'Cue bleed: ' + x + ' dB above room noise. MICE cancels it down to room-noise level, so it does not affect voice detection.';
+  else if (useCanc) {
+    msg = 'Cue bleed: ' + x + ' dB above room noise. MICE cancels ' + Math.round(beforeDb - afterDb) + ' dB of it. The ' + z + ' dB left is '
+      + (resDb < S.sens ? 'below' : 'above') + ' the ' + S.sens + ' dB voice threshold, and MICE allows for it when detecting your voice.';
+  } else msg = 'Cue bleed: ' + x + ' dB above room noise. It could not be cancelled, so MICE allows for its level when detecting your voice.';
+  if ((found || odd) && A.dirty) msg += ' There was other sound during the measurement, so these numbers may be off. If cue presses start showing up as voice, stop and start again in a quiet moment.';
+  if ((found || odd) && (resDb >= 25 || (resDb >= S.sens && !useCanc))) {
+    $('envNote').hidden = false;
+    $('envNote').textContent = 'A lot of the cue still reaches the microphone. Voice detection while the cue plays may start late or miss quiet speech. Lower the cue volume or use a separate microphone.';
+  }
+  if (NOCOMP) msg += ' (Compensation is switched off for this test.)';
+  $('bleedMsg').textContent = msg;
+  const brt = bleedRt(cap);
+  if (brt != null) $('delayMsg').textContent = 'Audio delay (round trip): ' + Math.round(brt) + ' ms, measured from the cue bleed at session start.';
+  else showRt();
+}
+async function startSession() {
+  busy = true;
+  const btn = $('sesBtn');
+  btn.disabled = true; $('delayBtn').disabled = true;
+  try {
+    if (dirHandle) await ensurePerm(dirHandle);
+    setStatus('Allow microphone access if asked…');
+    const cap = await openCapture();
+    setStatus('Measuring room noise. Stay quiet for 2 seconds…');
+    const waitStart = Date.now();
+    while (cap.V.state === 'cal') {
+      await sleep(100);
+      if (capture !== cap) throw new Error('stopped');
+      if (Date.now() - waitStart > 6000) throw new Error('No sound is arriving from the microphone. Check the input device and try again');
+    }
+    if (!S.muted) {
+      setStatus('You will hear a short hiss and the cue. Stay quiet while MICE measures how much reaches the microphone…');
+      await measureBleed(cap);
+      if (capture !== cap) throw new Error('stopped');
+    } else {
+      cap.bleed = null;
+      $('bleedMsg').textContent = 'Cue bleed not measured, because the cue is muted.';
+      $('envNote').hidden = true;
+    }
+    session = newSession(cap);
+    $('recBadge').classList.add('rec');
+    $('stNote').textContent = S.condition;
+    btn.textContent = 'Stop and save'; btn.classList.remove('primary'); btn.classList.add('stop');
+    setStatus('Recording. Hold the cue just before you voice.');
+    renderStats();
+    if (dirHandle) autosave = setInterval(async () => { if (session) { try { await writeFiles(await buildFiles(session, false)); } catch (e) { /* retried next time */ } } }, 60000);
+  } catch (err) {
+    closeCapture();
+    if (!(err && err.message === 'stopped')) micError(err);
+  } finally {
+    btn.disabled = false; $('delayBtn').disabled = !!session; busy = false;
+  }
+}
+async function stopSession() {
+  const s = session;
+  if (!s) return;
+  const btn = $('sesBtn');
+  btn.disabled = true;
+  s.stopping = true;
+  releaseAll();
+  await sleep(300);
+  const cap = s.cap;
+  if (cap.segOpen != null) voiceOff(cap, capNow(cap));
+  s.event('session_end', '', s.rel(capNow(cap)));
+  if (autosave) { clearInterval(autosave); autosave = null; }
+  renderStats();
+  let msg;
+  try {
+    setStatus('Saving…');
+    const files = await buildFiles(s, true);
+    session = null;
+    closeCapture();
+    if (dirHandle && await ensurePerm(dirHandle)) {
+      await writeFiles(files);
+      msg = 'Saved ' + files.length + ' files to “' + dirHandle.name + '”.';
+    } else {
+      const name = 'mice_' + s.id + '.zip';
+      download(await zipBlob(files), name);
+      msg = 'Downloaded ' + name + '.';
+    }
+    setStatus(msg);
+  } catch (err) {
+    setStatus('Saving failed' + (err && err.message ? ': ' + err.message : '') + '. The data is still in this tab; press the button again to retry.', true);
+    session = s;
+    s.stopping = false;
+    btn.disabled = false;
+    return;
+  }
+  lastSession = s;
+  $('recBadge').classList.remove('rec'); $('recBadge').textContent = 'Saved';
+  btn.textContent = 'Start session'; btn.classList.add('primary'); btn.classList.remove('stop');
+  btn.disabled = false; $('delayBtn').disabled = false;
+  $('stNote').textContent = 'Last session: ' + s.condition;
+}
+$('sesBtn').addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  if (busy) return;
+  if (session) stopSession(); else startSession();
+});
+
+// ---------------- match my voice ----------------
+$('matchBtn').addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  const cap = capture;
+  if (!cap) { $('matchMsg').textContent = 'Start a session and say a few sentences first.'; return; }
+  const f = [];
+  for (let i = cap.fc - 1; i >= 0 && i > cap.fc - HN; i--) { const j = i % HN; if (cap.hist.f0[j] > 0 && cap.hist.v[j]) f.push(cap.hist.f0[j]); }
+  if (f.length < 60) { $('matchMsg').textContent = 'Not enough speech yet. Say a few sentences, then try again.'; return; }
+  const med = median(f);
+  const m = Math.min(NOTE_HI, Math.max(NOTE_LO, Math.round(12 * Math.log2(med / 440) + 69)));
+  $('note').value = String(m);
+  setSetting('note', m);
+  $('matchMsg').textContent = 'Your speaking pitch is about ' + Math.round(med) + ' Hz. Note set to ' + noteName(m) + '.';
+});
+
+// ---------------- timeline ----------------
+let colors = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  ['ink', 'muted', 'line', 'cue', 'voice', 'voice-dim', 'surface', 'bg'].forEach((k) => { colors[k] = cs.getPropertyValue('--' + k).trim(); });
+  colors.sans = cs.getPropertyValue('--sans').trim();
+  colors.mono = cs.getPropertyValue('--mono').trim();
+}
+readColors();
+if (window.matchMedia) { const mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', readColors); }
+function rrect(g, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+  g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h); g.lineTo(x + r, y + h);
+  g.quadraticCurveTo(x, y + h, x, y + h - r); g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
+}
+function draw() {
+  requestAnimationFrame(draw);
+  const cv = $('tl');
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return;
+  const dpr = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const SPAN = 8, now = capture ? capNow(capture) : (ctx ? ctx.currentTime : 0);
+  const X = (t) => W - ((now - t) / SPAN) * W;
+  const cueY = 24, cueH = 22, vTop = 76, vH = H - vTop - 22;
+  g.font = '11px ' + colors.sans;
+  g.strokeStyle = colors.line; g.lineWidth = 1;
+  for (let s = Math.ceil(now - SPAN); s <= now; s++) { const x = Math.round(X(s)) + 0.5; g.beginPath(); g.moveTo(x, cueY - 6); g.lineTo(x, H - 18); g.stroke(); }
+  g.beginPath(); g.moveTo(0, vTop + vH + 0.5); g.lineTo(W, vTop + vH + 0.5); g.stroke();
+  g.fillStyle = colors.muted;
+  g.fillText('CUE', 2, cueY - 9);
+  g.fillText('VOICE', 2, vTop - 9);
+  g.textAlign = 'right'; g.fillText('now', W - 2, H - 4); g.textAlign = 'left'; g.fillText('8 s ago', 2, H - 4);
+  for (const p of livePresses) {
+    const b = X(p.up == null ? now : p.up);
+    if (b < 0) continue;
+    const a = Math.max(-6, X(p.down));
+    g.fillStyle = colors.cue; rrect(g, a, cueY, Math.max(3, b - a), cueH, 4); g.fill();
+  }
+  const cap = capture;
+  if (cap && cap.fc > 0) {
+    const lo = cap.V.floor - 3, hi = cap.V.floor + 42;
+    const bw = Math.max(1, (W / SPAN) * 0.01 + 0.3);
+    for (let i = cap.fc - 1; i >= 0 && i > cap.fc - HN; i--) {
+      const j = i % HN, t = cap.hist.t[j];
+      if (t < now - SPAN - 0.02) break;
+      const y = Math.max(0, Math.min(1, (cap.hist.db[j] - lo) / (hi - lo)));
+      if (y <= 0) continue;
+      g.fillStyle = cap.hist.v[j] ? colors.voice : colors['voice-dim'];
+      g.fillRect(X(t) - bw / 2, vTop + vH - y * vH, bw, y * vH);
+    }
+    if (cap.V.state === 'cal' || cap.V.state === 'hold') { g.fillStyle = colors.muted; g.textAlign = 'center'; g.font = '13px ' + colors.sans; g.fillText(cap.V.state === 'cal' ? 'Measuring room noise…' : 'Measuring cue bleed…', W / 2, vTop + vH / 2); g.textAlign = 'left'; }
+  } else {
+    g.fillStyle = colors.muted; g.textAlign = 'center'; g.font = '13px ' + colors.sans;
+    g.fillText('Microphone off. Start a session to see your voice.', W / 2, vTop + vH / 2 + 4);
+    g.textAlign = 'left';
+  }
+  g.font = '600 11px ' + colors.mono;
+  for (const pr of livePairs) {
+    const xa = X(pr.down), xb = X(pr.on);
+    if (Math.max(xa, xb) < 0) continue;
+    g.strokeStyle = colors.ink; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(xa, cueY + cueH + 2); g.lineTo(xb, vTop - 2); g.stroke();
+    const ms = Math.round((pr.on - pr.down) * 1000);
+    const label = (ms >= 0 ? '+' : '') + ms + ' ms';
+    g.fillStyle = colors.ink;
+    g.fillText(label, Math.min(W - 60, Math.max(2, (xa + xb) / 2 + 4)), (cueY + cueH + vTop) / 2 + 4);
+  }
+  g.lineWidth = 1;
+}
+requestAnimationFrame(draw);
+
+// ---------------- environment checks ----------------
+(function envCheck() {
+  const problems = [];
+  if (!(window.AudioContext || window.webkitAudioContext)) problems.push('This browser cannot play sound here.');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) problems.push('This browser cannot use the microphone from this file. Open it in Chrome or Edge, over https or from disk.');
+  if (problems.length) { $('envNote').hidden = false; $('envNote').textContent = problems.join(' '); }
+})();
+window.addEventListener('beforeunload', (e) => { if (session) { e.preventDefault(); e.returnValue = ''; } });
+window.__mice = { summarize, get session() { return session; }, get capture() { return capture; }, get last() { return lastSession; } };
+
+// ---------------- PWA: offline app shell (skipped on file://) ----------------
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      if (w) w.addEventListener('statechange', () => {
+        // Never reload mid-session: the update applies the next time the app is opened.
+        if (w.state === 'installed' && navigator.serviceWorker.controller) console.info('MICE update ready; applies on next launch.');
+      });
+    });
+  }).catch(() => { /* offline install is optional */ });
+}
+})();
+</script>
+</body>
+</html>
