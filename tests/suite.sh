@@ -2,6 +2,7 @@
 # Runs MICE in headless Chromium with a fake microphone and checks every case against ground truth.
 cd "$(dirname "$0")" || exit 1
 if [ ! -f test_voice.wav ] || [ ! -f test_voice_talk.wav ]; then python3 make_test_audio.py || exit 1; fi
+[ -f test_speech.wav ] || python3 make_speech.py || exit 1
 mkdir -p out
 run() { # name, url query, simulated bleed gain, simulated delay ms, [json changes]
   echo "== $1"
@@ -28,3 +29,7 @@ run no_cancel "?simbleed=0.08&simdelay=20&nocomp=1" 0.08 20
 echo
 echo "== rapid presses (every press and release must be logged)"
 node stress.js "?simbleed=0.08&simdelay=17.3"
+
+echo
+echo "== Dynamic voice learns the speaker (about 5.5 s of speech)"
+node profile_check.js

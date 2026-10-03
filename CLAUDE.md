@@ -89,5 +89,7 @@ See tests/README.md.
 ## v2 interface
 - Pad first; on touch screens it is 80% of the page height. Session and Cue sound panels collapse (state remembered).
 - Saving at stop is optional (`S.save`, default off on iOS, on elsewhere). Condition and notes fields were removed from the UI and the session JSON.
-- Sounds: soft piano, electric piano, warm organ, hum, and Dynamic voice (`dynamicCue`): a babbling, Sims-like voice whose pitch, vowel (formants) and loudness change every syllable while held. It schedules ahead with a timer that `stopCue` clears. The bleed model and timing tests pass with it (`dynamic_*` cases).
+- Sounds: soft piano, electric piano, warm organ, hum, and Dynamic voice (`dynamicCue`): a soft, babbling, Sims-like voice. It speaks in phrases with a pitch arc, central vowels and shallow loudness swells, all on eased glides. It schedules ahead with a timer that `stopCue` clears.
+- Dynamic voice adapts (`newProfile`, `learn`, `tuneFor`): after about 5.5 s of detected speech it uses the user's median pitch and range, syllable rate (loudness peaks), phrase length and a formant scale estimated from pitch. Until then it uses the chosen note and defaults. The profile lives on the capture (per session) and is saved as `voice_profile` in the session JSON.
+- Tests: `dynamic_*` suite cases for timing with the cue, `tests/profile_check.js` for learning (uses `make_speech.py`).
 - Hold key: Space, Left Ctrl, Left Shift or any key.

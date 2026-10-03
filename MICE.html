@@ -204,7 +204,7 @@ const NOTE_LO = 40, NOTE_HI = 69; // E2 to A4
 const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const noteName = (m) => NAMES[m % 12] + (Math.floor(m / 12) - 1);
-const TIMBRES = [['piano', 'Soft piano'], ['epiano', 'Electric piano'], ['organ', 'Warm organ'], ['hum', 'Hum (voice-like)'], ['dynamic', 'Dynamic voice (changing pitch)']];
+const TIMBRES = [['piano', 'Soft piano'], ['epiano', 'Electric piano'], ['organ', 'Warm organ'], ['hum', 'Hum (voice-like)'], ['dynamic', 'Dynamic voice (adapts to you)']];
 const S = {
   timbre: store.get('timbre', 'piano'),
   note: Math.min(NOTE_HI, Math.max(NOTE_LO, store.get('note', 52))),
@@ -239,9 +239,13 @@ function showVals() {
   $('padHint').textContent = 'Mouse, touch or ' + ({ space: 'space bar', lctrl: 'left Ctrl', lshift: 'left Shift' }[S.trigger] || 'any key');
 }
 showVals();
+function showMatch() {
+  const t = S.timbre === 'dynamic' ? tuneFor() : null;
+  $('matchMsg').textContent = t ? 'Dynamic voice is tuned to you: about ' + Math.round(t.center) + ' Hz, ' + t.rate.toFixed(1) + ' syllables a second.' : 'Sets the note to your speaking pitch.';
+}
 
 function setSetting(key, value) {
-  S[key] = value; store.set(key, value); showVals(); applyOut();
+  S[key] = value; store.set(key, value); showVals(); applyOut(); if (key === 'timbre') showMatch();
   if (session) session.event('settings', key + '=' + value);
 }
 $('timbre').addEventListener('change', (e) => setSetting('timbre', e.target.value));
@@ -328,7 +332,7 @@ function startCue(t) {
     lp.connect(amp);
     amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(L, t + 0.015);
   } else if (kind === 'dynamic') {
-    return dynamicCue(c, t, f0, L, amp, rel, srcs, osc);
+    return dynamicCue(c, t, f0, L, amp, rel, srcs, tuneFor());
   } else {
     const o = osc('sawtooth', f0), vib = osc('sine', 5.2);
     const vg = c.createGain(); vg.gain.value = f0 * 0.004; vib.connect(vg); vg.connect(o.frequency);
@@ -340,41 +344,64 @@ function startCue(t) {
   srcs.forEach((s) => s.start(t));
   return { rel, srcs };
 }
-// "Dynamic voice": a wordless, babbling voice (in the spirit of the Sims' speech). One glottal-like source runs through
-// three formant filters. Every 110-250 ms a new "syllable" picks a pitch (a random walk around the chosen note, with a
-// small fall at the end of each one), a new vowel (the formants glide to it) and a brief consonant-like dip. Words are
-// 2-4 syllables with a slightly longer dip between them. It never goes silent, so the cue stays a continuous outside
-// sound to lock onto, and the first syllable starts at once on the chosen note.
-const VOWELS = [[730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410], [300, 870, 2240], [660, 1720, 2410]];
-function dynamicCue(c, t, f0, L, amp, rel, srcs, osc) {
-  const o = osc(waves.bright, f0), vib = osc('sine', 5.4);
-  const vg = c.createGain(); vg.gain.value = f0 * 0.0035; vib.connect(vg); vg.connect(o.frequency);
-  const am = c.createGain(); am.gain.value = 1; am.connect(amp);
-  const fl = VOWELS[0].map((f, i) => {
-    const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = [5, 7, 9][i];
-    const g = c.createGain(); g.gain.value = [1, 0.7, 0.4][i];
-    o.connect(b); b.connect(g); g.connect(am); return b;
+// "Dynamic voice": a soft, wordless, babbling voice (in the spirit of the Sims' speech) that adapts to you.
+// One glottal-like source runs through three formant filters. It speaks in short "phrases" of several syllables:
+// the pitch follows a gentle arc over each phrase with small ripples and a fall at the end, the vowel drifts between
+// mid, central vowels (never pure a / e / i / o / u), and the loudness swells and eases a little per syllable.
+// Everything moves along smooth curves. It never goes silent, so it stays a continuous sound to lock onto, and the
+// first syllable starts at once. After about 5.5 s of your speech in the session (see learn / tuneFor) it follows
+// your own voice: centre pitch and pitch range, syllables per second, phrase length and a rough vocal-tract size.
+const NEUTRAL = [[600, 1250, 2500], [520, 1500, 2500], [450, 1050, 2450], [560, 1700, 2500], [400, 1350, 2400], [680, 1150, 2450]];
+function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
+  const R = Math.random;
+  const tn = tune || { center: f0, spread: 2.5, rate: 4.5, phrase: 6, s1: 1, s2: 1 };
+  const base = tn.center;
+  const pitch = c.createConstantSource(); pitch.offset.setValueAtTime(base, t); srcs.push(pitch);
+  const mk = (w, g) => { const o = c.createOscillator(); o.setPeriodicWave(w); o.frequency.value = 0; pitch.connect(o.frequency); srcs.push(o); const gg = c.createGain(); gg.gain.value = g; o.connect(gg); return gg; };
+  const src = c.createGain(); mk(waves.mellow, 0.9).connect(src); mk(waves.bright, 0.22).connect(src);
+  const vib = c.createOscillator(); vib.frequency.value = 5.1; srcs.push(vib);
+  const vg = c.createGain(); vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(base * 0.0022, t + 0.4);
+  vg.connect(pitch.offset);
+  const am = c.createGain(); am.gain.setValueAtTime(1, t);
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3000; lp.Q.value = 0.5;
+  am.connect(lp); lp.connect(amp);
+  const Q = [4, 5, 6], G = [1, 0.55, 0.25], sc = [tn.s1, tn.s2, tn.s2];
+  const fl = NEUTRAL[0].map((f, i) => {
+    const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.setValueAtTime(f * sc[i], t); b.Q.value = Q[i];
+    const g = c.createGain(); g.gain.value = G[i]; src.connect(b); b.connect(g); g.connect(am); return b;
   });
   amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(L, t + 0.02);
-  const st = { next: t, semi: 0, vowel: 0, left: 2 + Math.floor(Math.random() * 3), first: true };
-  const R = Math.random;
+  // Cosine-eased glide: steps every 25 ms, so nothing ever jumps.
+  const glide = (p, from, to, t0, dur) => {
+    p.setValueAtTime(from, t0);
+    const n = Math.max(2, Math.round(dur / 0.025));
+    for (let k = 1; k <= n; k++) p.linearRampToValueAtTime(from + (to - from) * (0.5 - 0.5 * Math.cos(Math.PI * k / n)), t0 + dur * k / n);
+  };
+  const st = { next: t, hz: base, f: NEUTRAL[0].map((f, i) => f * sc[i]), a: 1, vowel: 0, i: 0, N: tn.phrase, rip: 0, first: true };
   const syllable = () => {
-    const ts = st.next, dur = 0.11 + R() * 0.14;
-    if (!st.first) st.semi = Math.max(-5, Math.min(6, st.semi * 0.7 + (R() - 0.5) * 6));
-    const f = f0 * Math.pow(2, st.semi / 12);
-    o.frequency.setTargetAtTime(f, ts, st.first ? 0.001 : 0.03);                       // glide up or down to the new pitch
-    o.frequency.setTargetAtTime(f * Math.pow(2, -(0.3 + R() * 0.9) / 12), ts + dur * 0.55, 0.06);   // slight fall inside the syllable
-    let v; do { v = Math.floor(R() * VOWELS.length); } while (v === st.vowel && !st.first);
-    if (!st.first) VOWELS[v].forEach((fr, i) => fl[i].frequency.setTargetAtTime(fr * (1 + (R() - 0.5) * 0.06), ts, 0.03));
-    st.vowel = v;
-    const wordEnd = --st.left <= 0;
-    if (!st.first) { am.gain.setValueAtTime(0.45, ts); am.gain.setTargetAtTime(1, ts + 0.012, 0.012); } // brief dip, then the vowel opens
-    am.gain.setTargetAtTime(wordEnd ? 0.3 : 0.75, ts + dur * 0.8, 0.02);                                   // closing consonant / word gap
-    if (wordEnd) st.left = 2 + Math.floor(R() * 3);
-    st.next = ts + dur + (wordEnd ? 0.04 + R() * 0.06 : 0);
+    const ts = st.next, dur = (1 / tn.rate) * (0.85 + R() * 0.3);
+    const last = st.i === st.N - 1;
+    let semi = 0;
+    if (!st.first) {
+      st.rip = 0.55 * st.rip + (R() + R() + R() - 1.5) * tn.spread * 0.35;
+      semi = tn.spread * 0.7 * Math.sin(Math.PI * (st.i + 0.5) / st.N) - tn.spread * 0.3 * (st.i / st.N) + st.rip - (last ? tn.spread * 0.45 : 0);
+      semi = Math.max(-tn.spread * 1.4, Math.min(tn.spread * 1.4, semi));
+    }
+    const hz = base * Math.pow(2, semi / 12);
+    glide(pitch.offset, st.hz, hz, ts, st.first ? 0.02 : dur * 0.7); st.hz = hz;
+    if (!st.first) {
+      let v = st.vowel; if (R() < 0.65) { do { v = Math.floor(R() * NEUTRAL.length); } while (v === st.vowel); }
+      st.vowel = v;
+      fl.forEach((b, i) => { const to = NEUTRAL[v][i] * sc[i] * (1 + (R() - 0.5) * 0.08); glide(b.frequency, st.f[i], to, ts, dur * 0.85); st.f[i] = to; });
+    }
+    const endA = last ? 0.5 : 0.78;
+    glide(am.gain, st.a, 1, ts, dur * 0.4); glide(am.gain, 1, endA, ts + dur * 0.4, dur * 0.6); st.a = endA;
+    st.next = ts + dur + (last ? 0.08 + R() * 0.14 : 0);
+    if (last) { st.i = 0; st.N = Math.max(3, Math.round(tn.phrase + (R() - 0.5) * 3)); } else st.i++;
     st.first = false;
   };
   const fill = (until) => { while (st.next < until) syllable(); };
+  vib.connect(vg);
   fill(t + 1.5);
   const id = setInterval(() => fill(c.currentTime + 1.0), 150);
   srcs.forEach((x) => x.start(t));
@@ -628,6 +655,40 @@ function to16(x) { const y = Math.max(-1, Math.min(1, x)); return Math.round(y *
 function median(arr) { if (!arr.length) return null; const a = Float64Array.from(arr).sort(); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
 function quantile(arr, q) { if (!arr.length) return null; const a = Float64Array.from(arr).sort(); const p = (a.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p); return a[lo] + (a[hi] - a[lo]) * (p - lo); }
 
+// What MICE learns about your voice during a session, for the Dynamic voice cue: pitch, syllable rate, phrase length and a rough
+// vocal-tract size (estimated from pitch). It is ready after about 5.5 s of detected speech and keeps refining while you talk.
+function newProfile() { return { sec: 0, f: [], fn: 0, syl: 0, segN: 0, segSum: 0, valley: 0, lastPk: 0, s0: null, s1: null, s2: null, lastFc: -9, cache: null }; }
+function profReady(P) { return !!P && P.sec >= 5.5 && P.fn >= 200; }
+function learn(cap, db, f0) {
+  const P = cap.prof;
+  if (cap.fc !== P.lastFc + 1) { P.s0 = P.s1 = P.s2 = null; P.valley = db; }
+  P.lastFc = cap.fc; P.sec += 0.01;
+  const s = P.s0 == null ? db : 0.6 * P.s0 + 0.4 * db;
+  if (P.s1 != null && P.s2 != null && P.s1 > P.s2 && P.s1 >= s) {          // a loudness peak is about one syllable
+    if (P.s1 - P.valley >= 2 && P.sec - P.lastPk >= 0.09) { P.syl++; P.lastPk = P.sec; P.valley = s; }
+  }
+  P.valley = Math.min(P.valley, s);
+  P.s2 = P.s1; P.s1 = s; P.s0 = s;
+  if (f0 > 0) {
+    if (P.f.length < 3000) P.f.push(f0); else P.f[P.fn % 3000] = f0;
+    P.fn++;
+  }
+}
+function tuneFor() {
+  const cap = capture, P = cap && cap.prof;
+  if (!profReady(P)) return null;
+  if (P.cache && P.cache.n === P.fn) return P.cache.t;
+  const a = Float64Array.from(P.f).sort(), q = (x) => a[Math.min(a.length - 1, Math.floor(x * (a.length - 1)))];
+  const center = q(0.5), sigma = 12 * Math.log2(q(0.9) / q(0.1)) / 2.56;       // pitch spread in semitones
+  const spread = Math.max(1.8, Math.min(5, sigma * 1.6));
+  const rate = P.syl >= 8 ? Math.max(2.5, Math.min(6.5, P.syl / P.sec)) : 4.5;   // too little loudness variation to count syllables: use a usual rate
+  const seg = P.segN ? P.segSum / P.segN : 1.2;
+  const phrase = Math.max(3, Math.min(10, Math.round(seg * rate)));
+  const sc = Math.max(0.9, Math.min(1.2, Math.pow(center / 130, 0.22)));          // higher voices have a shorter vocal tract, so higher formants
+  const t = { center, spread, rate, phrase, s1: sc, s2: sc };
+  P.cache = { n: P.fn, t };
+  return t;
+}
 const HN = 2048; // frames of live history (about 20 s)
 async function openCapture() {
   const c = audio();
@@ -676,6 +737,7 @@ async function openCapture() {
     label: track ? track.label : '',
     trackSettings: track && track.getSettings ? track.getSettings() : {},
     fc: 0,
+    prof: newProfile(),
     hist: { t: new Float64Array(HN), db: new Float32Array(HN), v: new Uint8Array(HN), f0: new Float32Array(HN) },
     V: { state: 'cal', cal: [], calFrames: 150, floor: -60, run: 0, cand: 0, candFc: 0, qrun: 0, candEnd: 0 },
     segOpen: null, lastOff: -1e9, clicks: [], sim,
@@ -792,6 +854,10 @@ function onFrame(cap, t, rawDb, cancDb, cueMs, end, held) {
       if (V.qrun >= 12) { V.state = 'quiet'; V.qrun = 0; voiceOff(cap, V.candEnd); }
     } else V.qrun = 0;
   }
+  if (V.state === 'voice' && cap.prof) {
+    learn(cap, db, f0);
+    if (!cap.prof.shown && profReady(cap.prof)) { cap.prof.shown = true; showMatch(); }
+  }
   const vad = V.state === 'voice' ? 1 : 0;
   cap.hist.t[j] = t; cap.hist.db[j] = db; cap.hist.v[j] = vad; cap.hist.f0[j] = f0;
   cap.fc++;
@@ -849,6 +915,7 @@ function voiceOff(cap, off) {
   }
   fixHist(cap, off, 0);
   cap.lastOff = off;
+  if (cap.prof) { cap.prof.segN++; cap.prof.segSum += off - on; }
   liveSegs.push({ on, off }); if (liveSegs.length > 200) liveSegs.shift();
   if (session && session.cap === cap) { session.fixVad(off, 0); session.onSegment(on, off); }
 }
@@ -1116,6 +1183,7 @@ function sessionMeta(s, sum, final) {
     voice_detection: { floor_db: +s.cap.V.floor.toFixed(1), on_threshold_db: +(s.cap.V.floor + S.sens).toFixed(1), off_threshold_db: +(s.cap.V.floor + S.sens - 4).toFixed(1), min_pause_ms: 120, min_voice_ms: 60, frame_ms: 10 },
     timing_notes: 'Times are ms from session start, all read from one recorded stream: presses and releases come from a gate channel recorded alongside the microphone, so leads are sample-accurate within the recording. Voice times include the microphone delay and cue times exclude the headphone delay; subtract audio.round_trip_used_ms from a lead to estimate the lead you actually heard. When the cue bleeds into the microphone, cue_bleed.path_delay_ms measures that same round trip at session start.',
     summary: sum,
+    voice_profile: profReady(s.cap.prof) ? Object.assign({ speech_s: +s.cap.prof.sec.toFixed(1) }, tuneFor()) : null,
     user_agent: navigator.userAgent,
   };
 }
@@ -1545,7 +1613,7 @@ requestAnimationFrame(draw);
   if (problems.length) { $('envNote').hidden = false; $('envNote').textContent = problems.join(' '); }
 })();
 window.addEventListener('beforeunload', (e) => { if (session) { e.preventDefault(); e.returnValue = ''; } });
-window.__mice = { summarize, get session() { return session; }, get capture() { return capture; }, get last() { return lastSession; } };
+window.__mice = { get tune() { return tuneFor(); }, get prof() { return capture && capture.prof; }, summarize, get session() { return session; }, get capture() { return capture; }, get last() { return lastSession; } };
 
 // Collapsible panels: remembered per panel; closed by default on narrow screens so the pad stays in front.
 ['sesFold', 'cueFold'].forEach((id) => {
