@@ -19,6 +19,7 @@ const OFFSET = +(process.env.OFFSET || 0), PRE = +(process.env.PRE || 0.08);
       '--use-file-for-fake-audio-capture=' + WAV + '%noloop', '--autoplay-policy=no-user-gesture-required'],
   });
   const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
+  if (process.env.TIMBRE0) await context.addInitScript((t) => { try { localStorage.setItem('mice.timbre', JSON.stringify(t)); } catch (e) { /* ignore */ } }, process.env.TIMBRE0);
   const page = await context.newPage();
   const logs = [];
   page.on('console', (m) => logs.push(m.type() + ': ' + m.text()));

@@ -33,6 +33,7 @@ Changes made after the session starts: `{"timbre":"organ","note":"45","vol":"90"
 Environment variables:
 - `WAV`: the fake microphone file (default `test_voice.wav`).
 - `OFFSET`: seconds to shift the presses. Use 3 with `test_voice_talk.wav`.
+- `TIMBRE0`: the cue sound the session starts with (for example `dynamic`).
 - `PRE`: cue lead in seconds (default 0.08).
 - `PAGE`: path to the page.
 - `CHROMIUM_PATH`: a Chromium binary, if not Playwright's own.

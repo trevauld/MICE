@@ -204,7 +204,7 @@ const NOTE_LO = 40, NOTE_HI = 69; // E2 to A4
 const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const noteName = (m) => NAMES[m % 12] + (Math.floor(m / 12) - 1);
-const TIMBRES = [['piano', 'Soft piano'], ['epiano', 'Electric piano'], ['organ', 'Warm organ'], ['hum', 'Hum (voice-like)']];
+const TIMBRES = [['piano', 'Soft piano'], ['epiano', 'Electric piano'], ['organ', 'Warm organ'], ['hum', 'Hum (voice-like)'], ['dynamic', 'Dynamic voice (changing pitch)']];
 const S = {
   timbre: store.get('timbre', 'piano'),
   note: Math.min(NOTE_HI, Math.max(NOTE_LO, store.get('note', 52))),
@@ -285,7 +285,7 @@ function applyOut() {
   if (!out) return;
   out.gain.setTargetAtTime(S.muted ? 0 : S.volume, ctx.currentTime, 0.015);
 }
-const LEVEL = { piano: 0.5, epiano: 0.42, organ: 0.3, hum: 0.55 };
+const LEVEL = { piano: 0.5, epiano: 0.42, organ: 0.3, hum: 0.55, dynamic: 1.6 };
 
 // Start one cue at context time t. The cue sustains until stopCue.
 function startCue(t) {
@@ -327,6 +327,8 @@ function startCue(t) {
     osc(waves.organ, f0, 4).connect(g2); g2.connect(lp);
     lp.connect(amp);
     amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(L, t + 0.015);
+  } else if (kind === 'dynamic') {
+    return dynamicCue(c, t, f0, L, amp, rel, srcs, osc);
   } else {
     const o = osc('sawtooth', f0), vib = osc('sine', 5.2);
     const vg = c.createGain(); vg.gain.value = f0 * 0.004; vib.connect(vg); vg.connect(o.frequency);
@@ -338,7 +340,48 @@ function startCue(t) {
   srcs.forEach((s) => s.start(t));
   return { rel, srcs };
 }
+// "Dynamic voice": a wordless, babbling voice (in the spirit of the Sims' speech). One glottal-like source runs through
+// three formant filters. Every 110-250 ms a new "syllable" picks a pitch (a random walk around the chosen note, with a
+// small fall at the end of each one), a new vowel (the formants glide to it) and a brief consonant-like dip. Words are
+// 2-4 syllables with a slightly longer dip between them. It never goes silent, so the cue stays a continuous outside
+// sound to lock onto, and the first syllable starts at once on the chosen note.
+const VOWELS = [[730, 1090, 2440], [530, 1840, 2480], [270, 2290, 3010], [570, 840, 2410], [300, 870, 2240], [660, 1720, 2410]];
+function dynamicCue(c, t, f0, L, amp, rel, srcs, osc) {
+  const o = osc(waves.bright, f0), vib = osc('sine', 5.4);
+  const vg = c.createGain(); vg.gain.value = f0 * 0.0035; vib.connect(vg); vg.connect(o.frequency);
+  const am = c.createGain(); am.gain.value = 1; am.connect(amp);
+  const fl = VOWELS[0].map((f, i) => {
+    const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = [5, 7, 9][i];
+    const g = c.createGain(); g.gain.value = [1, 0.7, 0.4][i];
+    o.connect(b); b.connect(g); g.connect(am); return b;
+  });
+  amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(L, t + 0.02);
+  const st = { next: t, semi: 0, vowel: 0, left: 2 + Math.floor(Math.random() * 3), first: true };
+  const R = Math.random;
+  const syllable = () => {
+    const ts = st.next, dur = 0.11 + R() * 0.14;
+    if (!st.first) st.semi = Math.max(-5, Math.min(6, st.semi * 0.7 + (R() - 0.5) * 6));
+    const f = f0 * Math.pow(2, st.semi / 12);
+    o.frequency.setTargetAtTime(f, ts, st.first ? 0.001 : 0.03);                       // glide up or down to the new pitch
+    o.frequency.setTargetAtTime(f * Math.pow(2, -(0.3 + R() * 0.9) / 12), ts + dur * 0.55, 0.06);   // slight fall inside the syllable
+    let v; do { v = Math.floor(R() * VOWELS.length); } while (v === st.vowel && !st.first);
+    if (!st.first) VOWELS[v].forEach((fr, i) => fl[i].frequency.setTargetAtTime(fr * (1 + (R() - 0.5) * 0.06), ts, 0.03));
+    st.vowel = v;
+    const wordEnd = --st.left <= 0;
+    if (!st.first) { am.gain.setValueAtTime(0.45, ts); am.gain.setTargetAtTime(1, ts + 0.012, 0.012); } // brief dip, then the vowel opens
+    am.gain.setTargetAtTime(wordEnd ? 0.3 : 0.75, ts + dur * 0.8, 0.02);                                   // closing consonant / word gap
+    if (wordEnd) st.left = 2 + Math.floor(R() * 3);
+    st.next = ts + dur + (wordEnd ? 0.04 + R() * 0.06 : 0);
+    st.first = false;
+  };
+  const fill = (until) => { while (st.next < until) syllable(); };
+  fill(t + 1.5);
+  const id = setInterval(() => fill(c.currentTime + 1.0), 150);
+  srcs.forEach((x) => x.start(t));
+  return { rel, srcs, onStop: () => clearInterval(id) };
+}
 function stopCue(v, t) {
+  if (v.onStop) v.onStop();
   const r = Math.max(0.03, S.release / 1000);
   v.rel.gain.setValueAtTime(1, t);
   v.rel.gain.setTargetAtTime(0, t, r / 3);

@@ -89,4 +89,5 @@ See tests/README.md.
 ## v2 interface
 - Pad first; on touch screens it is 80% of the page height. Session and Cue sound panels collapse (state remembered).
 - Saving at stop is optional (`S.save`, default off on iOS, on elsewhere). Condition and notes fields were removed from the UI and the session JSON.
+- Sounds: soft piano, electric piano, warm organ, hum, and Dynamic voice (`dynamicCue`): a babbling, Sims-like voice whose pitch, vowel (formants) and loudness change every syllable while held. It schedules ahead with a timer that `stopCue` clears. The bleed model and timing tests pass with it (`dynamic_*` cases).
 - Hold key: Space, Left Ctrl, Left Shift or any key.

@@ -20,6 +20,8 @@ run volume_down "?simbleed=0.08&simdelay=17.3" 0.04 17.3 '{"simgain":0.04}'
 run volume_up "?simbleed=0.08&simdelay=17.3" 0.16 17.3 '{"simgain":0.16}'
 export PRE=0.035; run short_lead "?simbleed=0.08&simdelay=17.3" 0.08 17.3; unset PRE
 export WAV=test_voice_talk.wav OFFSET=3; run talk_during_setup "?simbleed=0.08&simdelay=17.3" 0.08 17.3; unset WAV OFFSET
+TIMBRE0=dynamic run dynamic_from_start "?simbleed=0.08&simdelay=17.3" 0.08 17.3
+run dynamic_switched "?simbleed=0.08&simdelay=17.3" 0.08 17.3 '{"timbre":"dynamic","vol":"90"}'
 echo
 echo "Deliberate failure, cancelling off: expect 7 voice starts, each about 20 ms after its press."
 run no_cancel "?simbleed=0.08&simdelay=20&nocomp=1" 0.08 20
