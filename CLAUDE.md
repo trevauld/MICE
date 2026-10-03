@@ -82,4 +82,5 @@ See tests/README.md.
 - Bump `VERSION` in sw.js on each release. A new worker takes over on the next launch, never mid-session.
 - Host over HTTPS (any static host; localhost also counts). The mic and installing need a secure context.
 - `tests/pwa_check.js` checks install and offline reload (serve the folder on :8077 first).
-- Not done yet: iOS Safari has no folder picker, so sessions download as .zip there; Safari's audio and AudioWorklet behaviour is untested.
+- Live at https://mice.keremk.workers.dev (Cloudflare Worker, static assets, deploys from GitHub main; see wrangler.toml and .assetsignore).
+- Checked on iOS Safari: works. It has no folder picker, so sessions download as .zip there.
