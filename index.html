@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v13</div>
+  <div class="ver" id="ver">MICE v14</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -363,18 +363,21 @@ const MUMBLE = 0.7;   // how far vowels keep their distinct shape (1 = full vowe
 // consonant-like gestures: formant targets (Hz, before scaling) for the first ~30 ms, how low the loudness dips,
 // and how far the top end closes (a nasal is dull).
 const GESTURES = [null, { f: [280, 1100, 2300], dip: 0.5, lp: 1200 }, { f: [350, 900, 2200], dip: 0.7, lp: 2600 }, { f: [450, 1500, 2600], dip: 0.38, lp: 2200 }];
-// Real consonants: bands of noise that bypass the vowel filters. Measured from 361 recordings of a female speaker (CMU Arctic "slt",
-// about 14 min of speech, fricative-like events found from the audio itself, see research/): 1.23 events per second of speech
-// (about 0.27 per syllable), 62% "s"-like (centre 6.3 kHz, 80 ms, 20 ms fade-in, 7.4 dB below the vowels) and 38% "sh"-like
-// (centre 4.5 kHz, 70 ms, 10 ms fade-in, 9.1 dB below the vowels). Real sibilants that bright and loud sounded like a thin whistle on
-// a headset, so SIB_SOFT_DB makes them quieter and the centre is kept below 4.8 kHz. rel = level against the vowels (dB) before
-// softening (s and sh measured; f, z and t are my estimates). lvl is derived from it (see below).
+// Real consonants: bands of noise that bypass the vowel filters. Two independent sources agree:
+//  - Jongman, Wayland & Wong (2000), JASA 108(3), 1252-1263: spectral mean (Hz) s/z 6133, sh/zh 4229, f/v 5108, th/dh 5137 (f and th are
+//    flat and diffuse); noise level against the vowel (dB) s -11.0, z -9.0, sh -9.9, zh -8.3, f -20.8, v -13.1, th -21.9, dh -14.0;
+//    voiced fricatives are about 0.5-0.66 as long as voiceless ones.
+//  - my own measurement of 361 recordings of a female speaker (CMU Arctic "slt", see research/): 1.23 fricative-like events per second of
+//    speech (about 0.27 per syllable), 62% "s"-like (centre 6.3 kHz, 80 ms, 20 ms fade-in, -7.4 dB), 38% "sh"-like (4.5 kHz, 70 ms, 10 ms
+//    fade-in, -9.1 dB).
+// Real sibilants that bright and loud sounded like a thin whistle on a headset, so SIB_SOFT_DB makes them quieter and the centre is kept
+// below 4.8 kHz. rel = level against the vowels (dB) before softening; t (a burst) is my estimate. lvl is derived from rel (see below).
 const SIB_SOFT_DB = -8;
 const NOISY = [
-  { name: 's',  fcr: 1.0,  Q: 0.7, rel: -7.4,  dur: 0.08,  rise: 0.02,  closure: 0,    f: [320, 1400, 2500], dip: 0.45, lp: 3000, w: 5 },
-  { name: 'sh', fcr: 0.7,  Q: 0.7, rel: -9.1,  dur: 0.07,  rise: 0.012, closure: 0,    f: [320, 1700, 2400], dip: 0.5, lp: 3000, w: 3 },
-  { name: 'f',  fcr: 0.8,  Q: 0.4, rel: -13,   dur: 0.07,  rise: 0.02,  closure: 0,    f: [350, 1200, 2400], dip: 0.65, lp: 3000, w: 1 },
-  { name: 'z',  fcr: 0.9,  Q: 0.7, rel: -12,   dur: 0.08,  rise: 0.02,  closure: 0,    f: [300, 1300, 2500], dip: 0.7, lp: 3000, w: 1 },
+  { name: 's',  fcr: 1.0,  Q: 0.7, rel: -10,   dur: 0.08,  rise: 0.02,  closure: 0,    f: [320, 1400, 2500], dip: 0.45, lp: 3000, w: 5 },
+  { name: 'z',  fcr: 0.95, Q: 0.7, rel: -9,    dur: 0.055, rise: 0.02,  closure: 0,    f: [300, 1300, 2500], dip: 0.7, lp: 3000, w: 3 },
+  { name: 'sh', fcr: 0.7,  Q: 0.7, rel: -9.5,  dur: 0.075, rise: 0.012, closure: 0,    f: [320, 1700, 2400], dip: 0.5, lp: 3000, w: 2 },
+  { name: 'f',  fcr: 0.8,  Q: 0.4, rel: -21,   dur: 0.075, rise: 0.02,  closure: 0,    f: [350, 1200, 2400], dip: 0.65, lp: 3000, w: 2 },
   { name: 't',  fcr: 0.7,  Q: 0.6, rel: -9,    dur: 0.025, rise: 0.008, closure: 0.04, f: [400, 1600, 2600], dip: 0.2, lp: 3000, w: 2 },
 ];
 // Noise through the band filters has an RMS of about 0.26 (unity gain), the cue level is 1.6 and the vowels come out at an RMS of

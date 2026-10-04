@@ -18,5 +18,24 @@ The data files are not in this repository; download them to a scratch folder to 
 - Limits: one voice; events include some bursts and "h"; no separate f, th, z or t numbers. Those levels in `NOISY` are my estimates.
 - Real sibilants this bright and loud sounded harsh on a headset, so `SIB_SOFT_DB` (-8 dB) and a 4.8 kHz cap on the hiss centre are deliberate departures from the data.
 
-## Still wanted
-- Published fricative numbers (Jongman, Wayland and Wong 2000, JASA 108(3), 1252-1263, doi 10.1121/1.1288413): spectral peak, centroid, duration and relative amplitude per fricative, including f, th, z and the male/female split.
+## Consonants: Jongman, Wayland and Wong (2000), JASA 108(3), 1252-1263
+Read from the full paper (not stored in this repository because it is copyrighted). Word-initial fricatives in citation words, 20 speakers (10 female, 10 male).
+| | spectral peak | spectral mean | noise level vs vowel | frication duration |
+|---|---|---|---|---|
+| /f/ /v/ | 7733 Hz | 5108 Hz | f -20.8 dB, v -13.1 dB | 166 ms, 80 ms |
+| /th/ /dh/ | 7470 Hz | 5137 Hz | -21.9 dB, -14.0 dB | 163 ms, 88 ms |
+| /s/ /z/ | 6839 Hz | 6133 Hz | s -11.0 dB, z -9.0 dB | 178 ms, 118 ms |
+| /sh/ /zh/ | 3820 Hz | 4229 Hz | -9.9 dB, -8.3 dB | 178 ms, 123 ms |
+- Female spectral peaks average 6800 Hz against 6122 Hz for male.
+- Relative amplitude was about 1.7 dB lower for women than men.
+- Durations are for careful speech (about 400 ms words); running speech is shorter (80 ms in the Arctic measurement). Only the ratios were used: voiced fricatives about 0.66 as long as voiceless.
+
+## Cross-check
+| | Arctic (running speech, one female voice) | Jongman et al. (isolated words, 20 speakers) |
+|---|---|---|
+| "s" centre | 6.3 kHz | 6.1 kHz (spectral mean) |
+| "sh" centre | 4.5 kHz | 4.2 kHz |
+| "s" level vs vowels | -7.4 dB | -11.0 dB (s), -9.0 dB (z) |
+| "sh" level vs vowels | -9.1 dB | -9.9 dB (sh), -8.3 dB (zh) |
+
+Two different methods and speech styles agree on centre frequency and roughly on level. `NOISY` uses the Jongman levels (including the faint f at -21 dB) and the Arctic rate, mix and fade-ins. Only the burst "t" is still my estimate.

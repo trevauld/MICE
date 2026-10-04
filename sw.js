@@ -1,6 +1,6 @@
 // MICE service worker: precache the app shell so it works offline. No network requests beyond our own files.
 // Bump VERSION on every release so installed copies update. Keep it in step with the "MICE vN" label in index.html (tests/ui_check.js checks).
-const VERSION = 'mice-v13';
+const VERSION = 'mice-v14';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
