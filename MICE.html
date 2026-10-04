@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v15</div>
+  <div class="ver" id="ver">MICE v16</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -163,7 +163,11 @@ details.fold[open]>summary{margin-bottom:12px}
           <option value="lshift">Left Shift</option>
           <option value="any">Any key (foot pedals and clickers)</option>
         </select></label>
-        <label class="check"><input type="checkbox" id="mute"> <span>Mute the cue. Presses are still logged, for comparison runs.</span></label>
+        <div id="hissBox" class="hiss" hidden>
+          <label class="check"><input type="checkbox" id="hiss"> <span>Hiss: soft "s" and "sh" consonant noise in the Dynamic voice</span></label>
+          <label class="f" id="hissAmt"><span class="lab">Hiss level <span class="val" id="hissVal"></span></span><input type="range" id="hissDb" min="-30" max="-4" step="1"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="mute"> <span>Mute the cue</span></label>
       </details>
 
     </div>
@@ -192,6 +196,8 @@ const S = {
   volume: store.get('volume', 0.55),
   release: store.get('release', 120),
   muted: store.get('muted', false),
+  hiss: store.get('hiss', true),
+  hissDb: store.get('hissDb', -16),
   trigger: store.get('trigger', 'space'),
   mic: store.get('mic', ''),
   sens: 12,
@@ -208,12 +214,18 @@ for (let m = NOTE_LO; m <= NOTE_HI; m++) noteItems.push([String(m), noteName(m) 
 fill($('note'), noteItems, String(S.note));
 $('trigger').value = S.trigger;
 $('mute').checked = S.muted;
+$('hiss').checked = S.hiss;
+$('hissDb').value = String(S.hissDb);
 
 $('vol').value = String(Math.round(S.volume * 100));
 $('rel').value = String(S.release);
 function showVals() {
   $('volVal').textContent = Math.round(S.volume * 100) + '%';
   $('relVal').textContent = S.release + ' ms';
+  $('hissVal').textContent = S.hissDb + ' dB';
+  $('hissBox').hidden = S.timbre !== 'dynamic';
+  $('hissAmt').style.opacity = S.hiss ? '1' : '0.45';
+  $('hissDb').disabled = !S.hiss;
   $('padHint').textContent = 'Mouse, touch or ' + ({ space: 'space bar', lctrl: 'left Ctrl', lshift: 'left Shift' }[S.trigger] || 'any key');
 }
 showVals();
@@ -230,6 +242,8 @@ $('note').addEventListener('change', (e) => setSetting('note', +e.target.value))
 $('vol').addEventListener('input', (e) => setSetting('volume', +e.target.value / 100));
 $('rel').addEventListener('input', (e) => setSetting('release', +e.target.value));
 $('trigger').addEventListener('change', (e) => setSetting('trigger', e.target.value));
+$('hiss').addEventListener('change', (e) => setSetting('hiss', e.target.checked));
+$('hissDb').addEventListener('input', (e) => setSetting('hissDb', +e.target.value));
 $('mute').addEventListener('change', (e) => setSetting('muted', e.target.checked));
 $('micSel').addEventListener('change', (e) => { S.mic = e.target.value; store.set('mic', S.mic); });
 ['timbre', 'note', 'trigger', 'micSel'].forEach((id) => $(id).addEventListener('change', (e) => e.target.blur()));
@@ -370,9 +384,8 @@ const GESTURES = [null, { f: [280, 1100, 2300], dip: 0.5, lp: 1200 }, { f: [350,
 //  - my own measurement of 361 recordings of a female speaker (CMU Arctic "slt", see research/): 1.23 fricative-like events per second of
 //    speech (about 0.27 per syllable), 62% "s"-like (centre 6.3 kHz, 80 ms, 20 ms fade-in, -7.4 dB), 38% "sh"-like (4.5 kHz, 70 ms, 10 ms
 //    fade-in, -9.1 dB).
-// Real sibilants that bright and loud sounded like a thin whistle on a headset, so SIB_SOFT_DB makes them quieter and the centre is kept
-// below 4.8 kHz. rel = level against the vowels (dB) before softening; t (a burst) is my estimate. lvl is derived from rel (see below).
-const SIB_SOFT_DB = -16;
+// Real sibilants that bright and loud sounded like a thin whistle on a headset, so the Hiss level slider (default -16 dB below the data) makes them quieter and the centre is kept
+// below 4.8 kHz. rel = level against the vowels (dB) before softening; t (a burst) is my estimate. The level used is derived from rel (see below).
 const NOISY = [
   { name: 's',  fcr: 1.0,  Q: 0.7, rel: -10,   dur: 0.08,  rise: 0.02,  closure: 0,    f: [320, 1400, 2500], dip: 0.45, lp: 3000, w: 5 },
   { name: 'z',  fcr: 0.95, Q: 0.7, rel: -9,    dur: 0.055, rise: 0.02,  closure: 0,    f: [300, 1300, 2500], dip: 0.7, lp: 3000, w: 3 },
@@ -382,7 +395,7 @@ const NOISY = [
 ];
 // Noise through the band filters has an RMS of about 0.26 (unity gain), the cue level is 1.6 and the vowels come out at an RMS of
 // about 0.105, so a noise gain of 0.25 * 10^(dB / 20) puts the consonant dB below the vowels.
-NOISY.forEach((x) => { x.lvl = 0.25 * Math.pow(10, (x.rel + SIB_SOFT_DB) / 20); });
+const noisyLevel = (x) => 0.25 * Math.pow(10, (x.rel + S.hissDb) / 20);   // S.hissDb: how far below the real level the hiss sits (the Hiss level slider)
 function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   const R = Math.random;
   const tn = tune || { center: f0, spread: 2.5, rate: 4.5, phrase: 6 };
@@ -414,7 +427,7 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   const nb = c.createBiquadFilter(); nb.type = 'bandpass'; nb.frequency.value = 4200; nb.Q.value = 0.7;
   const nl = c.createBiquadFilter(); nl.type = 'lowpass'; nl.frequency.value = 5200; nl.Q.value = 0.5;      // rounds off the top: no thin, sharp edge
   const fg = c.createGain(); fg.gain.setValueAtTime(0, t); fnz.connect(nb); nb.connect(nl); nl.connect(fg); fg.connect(amp);   // consonant noise joins after the low-pass
-  const sibFc = Math.min(4800, tn.sibFc || 4200), pFric = tn.fric != null ? tn.fric : 0.27;
+  const sibFc = Math.min(4800, tn.sibFc || 4200), pFric = !S.hiss ? 0 : (tn.fric != null ? tn.fric : 0.27);
   const Q = [4, 5, 6], G = [1, 0.55, 0.25];
   const fl = VT[0].on.map((f, i) => {
     const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.setValueAtTime(f, t); b.Q.value = Q[i];
@@ -473,7 +486,7 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
       glide(am.gain, st.a, g.dip * peak, ts, 0.02); glide(am.gain, g.dip * peak, peak, ts + gd, upDur); fall0 = ts + gd + upDur;
       glide(lp.frequency, st.lp, g.lp, ts, 0.03); glide(lp.frequency, g.lp, 3000, ts + gd, 0.06); st.lp = 3000;
       if (g.dur) {                                    // the consonant noise itself: a quick rise, a hold, a quick fall
-        const t0 = ts + g.closure, lv = g.lvl * peak;
+        const t0 = ts + g.closure, lv = noisyLevel(g) * peak;
         nb.frequency.setValueAtTime(sibFc * g.fcr * (0.92 + R() * 0.16), ts); nb.Q.setValueAtTime(g.Q, ts);
         fg.gain.setValueAtTime(0, t0); fg.gain.linearRampToValueAtTime(lv, t0 + Math.min(g.rise, g.dur * 0.4));
         fg.gain.setValueAtTime(lv, t0 + g.dur * 0.5); fg.gain.linearRampToValueAtTime(0, t0 + g.dur);

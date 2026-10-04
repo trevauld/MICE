@@ -19,6 +19,7 @@ The first run creates the test audio (`make_test_audio.py`, `make_speech.py`; th
 - `ui_check.js`: the interface (removed items stay removed, the version label matches `sw.js`, pad first and 80% tall on touch screens, collapsible panels, hold keys, text not selectable).
 - `detect_check.js`: voice detection. With a voice WAV and the cue playing (with simulated bleed into the microphone, including the Dynamic voice as the cue) all 6 bursts must be found and the gaps between them must match. With no voice (a quiet room, hiss that gets louder like phone auto-gain, a low hum, the cue leaking into a silent room) nothing may be detected.
 - `profile_check.js`: the Dynamic voice learns a speech-like WAV with known pitch, syllable rate, vowel formants and phrase shape.
+- `hiss_check.js`: the Hiss setting really turns the Dynamic voice's consonant noise on and off.
 - `pwa_check.js`: installs the service worker and reloads offline.
 
 ## Options
