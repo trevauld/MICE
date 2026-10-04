@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v16</div>
+  <div class="ver" id="ver">MICE v17</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -1091,6 +1091,19 @@ function voiceOff(cap, off) {
 
 // ---------------- start and stop ----------------
 let busy = false, session = null;   // session: { cap } while listening
+// Keep the screen on while listening (a locked phone stops the microphone). The browser drops the lock whenever the page is hidden,
+// so it is asked for again when the page comes back. Returns whether the screen is being held awake.
+let wake = null;
+async function keepAwake(on) {
+  try {
+    if (!on) { const w = wake; wake = null; if (w) await w.release(); return false; }
+    if (!('wakeLock' in navigator)) return false;
+    if (wake && !wake.released) return true;
+    wake = await navigator.wakeLock.request('screen');
+    return true;
+  } catch (e) { wake = null; return false; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && session) keepAwake(true); });
 function setStatus(msg, warn) { $('status').textContent = msg || ''; $('status').classList.toggle('warn', !!warn); }
 function micError(err) {
   if (err && err.message === 'nomedia') setStatus('This browser cannot use the microphone here. Open this file in Chrome or Edge.', true);
@@ -1293,9 +1306,10 @@ async function startSession() {
       $('envNote').hidden = true;
     }
     session = { cap };
+    const awake = await keepAwake(true);
     $('recBadge').classList.add('rec'); $('recBadge').textContent = 'Listening';
     btn.textContent = 'Stop listening'; btn.classList.remove('primary'); btn.classList.add('stop');
-    setStatus('Listening. Hold the cue just before you speak; the Dynamic voice learns from your speech as you go.');
+    setStatus('Listening. Hold the cue just before you speak; the Dynamic voice learns from your speech as you go. ' + (awake ? 'The screen stays on while listening.' : 'This browser cannot keep the screen on, so set Auto-Lock to Never or the phone will stop listening when it locks.'));
   } catch (err) {
     closeCapture();
     if (!(err && err.message === 'stopped')) micError(err);
@@ -1310,6 +1324,7 @@ async function stopSession() {
   const cap = s.cap;
   if (cap.segOpen != null) voiceOff(cap, capNow(cap));
   session = null;
+  keepAwake(false);
   closeCapture();
   const btn = $('sesBtn');
   $('recBadge').classList.remove('rec'); $('recBadge').textContent = 'Mic off';
