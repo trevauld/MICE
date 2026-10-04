@@ -39,3 +39,14 @@ Read from the full paper (not stored in this repository because it is copyrighte
 | "sh" level vs vowels | -9.1 dB | -9.9 dB (sh), -8.3 dB (zh) |
 
 Two different methods and speech styles agree on centre frequency and roughly on level. `NOISY` uses the Jongman levels (including the faint f at -21 dB) and the Arctic rate, mix and fade-ins. Only the burst "t" is still my estimate.
+
+## Speech onset detection: Roux, Armstrong & Carreiras (2017), Chronset
+Behavior Research Methods 49(5), 1864-1881, doi 10.3758/s13428-016-0830-1 (CC BY). Read in full; the PDF is not stored here. It is an offline tool for measuring
+reaction times from recorded responses (MATLAB, Chronux toolbox), not a real-time detector.
+- Six features from a multitaper spectrogram (10 ms window, 1 ms step): amplitude, Wiener entropy (spectral flatness, independent of loudness and distance), spectral change,
+  amplitude modulation, frequency modulation and harmonic pitch (cepstrum). Onset = four of the six above their thresholds for 35 ms.
+- Unvoiced starts ([s], [f], [p]) are caught by then walking back to the first rise in amplitude: a retroactive step.
+- Finding: amplitude alone fails on coughs, lip smacks, breath and noise; several features together are far better. Against human raters, estimates mostly fall within 10 to 50 ms
+  (R2 .97, offset about 28 ms). Even the best offline method is only good to tens of milliseconds.
+- Not studied: disfluent speech, and nothing real-time.
+What MICE can take from it: amplitude-independent features (Wiener entropy) for the auto cue trigger, and a walk-back to find the true onset for the latency meter.
