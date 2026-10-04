@@ -57,7 +57,8 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   the data (the Hiss checkbox and level slider in Cue sound, shown only for the Dynamic voice; default -16 dB; hiss centre capped at 4.8 kHz) because real sibilants sounded like a thin whistle on a headset. The burst "t" is an estimate.
   The paper's PDF is kept out of git and the deploy (`*.pdf` in .gitignore and .assetsignore).
 - **Auto cue (experimental, `autoFrame`, `autoStart`, `autoEnd`, `meter`):** off by default and never remembered. When on, a frame that clears the *recent* noise level by
-  `S.sens` arms the trigger for 3 frames; the first of those whose energy is mostly in the voice range (`lowFrac` >= 0.8: broadband rustle, hiss and breath fail) starts the
+  `S.sens` arms the trigger for 3 frames; the first of those with at least 2 of 3 votes (energy mostly in the voice range `lowFrac` >= 0.8; a peaked spectrum, Wiener entropy
+  < 0.4, which is independent of loudness and gain and measured about 0.06 to 0.34 on voice onsets against 0.44 to 0.65 on rustle; a clear pitch) starts the
   cue through the normal `press()`. A manual press takes over (`cue.auto = false`). Two frames with a clear pitch (within 8 semitones of the learned centre) confirm it; none
   within 0.25 s drops it, counts a false start and doubles the wait before the next start (0.6 s up to 3 s, forgotten after 10 quiet seconds). The cue is released with the voice
   (`voiceOff`), after 0.5 s of nothing, or after 8 s. Lessons: (1) the first version compared with the start-up floor; once a real room, a cord or the phone's microphone gain was
@@ -65,6 +66,11 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   The trigger now follows the 30th percentile of the last 2 s of quiet frames. (2) Zero-crossing rate is wrong at the trigger: that first frame is mostly room noise.
   Energy-weighted spectral share is right. It cannot react to unvoiced starts (s, f) and, because it can only react after the voice has begun, never to a block.
   Automatic presses do not count as holds for learning (`p.auto`). Test audio: `test_rustle.wav`, `test_noisy_voice.wav`, `test_slam.wav`.
+  `refineOnset` (the voice-onset reference for the meter and for the blue lines) follows Chronset (Roux et al. 2017): from the confirmed voice it walks back along the recording to where the
+  loudness first rose clear of the noise, up to 150 ms and never into the previous speech, bridging dips under 15 ms. "Clear of the noise" is 6 dB over the quiet frames just before (not the
+  start-up floor), and it looks forward as well as back because the frame candidate can be early in noise. Against known truth (`tests/onset_check.js`, located with a sync pulse): clean 0 ms,
+  noisy room +3 to +4 ms (one -9), hiss-first onsets 0 to 2 ms; the previous version was 31 ms early in noise and 59 ms late on hiss-first onsets. Real speech is messier: Chronset itself
+  agrees with human raters only to within 10 to 50 ms.
   The meter records the start delay inside MICE: the cue's start (the gate marker, sample-accurate) minus the refined voice onset (`refineOnset`), both from the
   recording, as a running mean with last, min, max, false starts, ignored and a reset. It adds the browser's reported output delay (`ctx.outputLatency + baseLatency`),
   or half the bleed round trip, to estimate the time until the user hears the cue. In a noisy room `refineOnset` has less to go on, so the meter errs on the long side.

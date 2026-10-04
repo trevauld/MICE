@@ -111,7 +111,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v21</div>
+  <div class="ver" id="ver">MICE v22</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -667,6 +667,7 @@ function makeAnalyzer(sr) {
   const gF = Array.from({ length: GRID }, (_, i) => 250 + i * (3800 - 250) / (GRID - 1));
   const gC = gF.map((f) => Float64Array.from({ length: LPCP + 1 }, (_, k) => Math.cos(2 * Math.PI * f / fs * k)));
   const gS = gF.map((f) => Float64Array.from({ length: LPCP + 1 }, (_, k) => Math.sin(2 * Math.PI * f / fs * k)));
+  const fre = new Float64Array(512), fim = new Float64Array(512);
   const lw = new Float64Array(pwin), lr = new Float64Array(LPCP + 1), la = new Float64Array(LPCP + 1), lt = new Float64Array(LPCP + 1), lsp = new Float64Array(GRID);
   let total = 0, T0 = null, accV = 0, accC = 0, accM = 0, accN = 0, since = 0, cueSq = 0;
   let gHigh = false, clickK = -1, clickArm = true;
@@ -776,6 +777,30 @@ function makeAnalyzer(sr) {
         if (q < 7) lo += pw; else hi += pw;
       }
       return lo / (lo + hi + 1e-30);
+    },
+    // Wiener entropy of the last 32 ms (Roux, Armstrong & Carreiras 2017): the geometric over the arithmetic mean of the power spectrum between
+    // 150 Hz and 4 kHz. Independent of loudness, distance and microphone gain. About 0.56 for noise, far lower (peaks and valleys between the
+    // harmonics) for voice.
+    entropy(end) {
+      const N = 512;
+      if (end < N + 1) return 1;
+      for (let i = 0; i < N; i++) { fre[i] = ring[(end - N + i) & MASK] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1))); fim[i] = 0; }
+      for (let i = 1, j = 0; i < N; i++) { let bit = N >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { const t = fre[i]; fre[i] = fre[j]; fre[j] = t; } }
+      for (let len = 2; len <= N; len <<= 1) {
+        const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+        for (let i = 0; i < N; i += len) {
+          let cr = 1, ci = 0;
+          for (let k = 0; k < len / 2; k++) {
+            const a = i + k, b = a + len / 2, tr = fre[b] * cr - fim[b] * ci, ti = fre[b] * ci + fim[b] * cr;
+            fre[b] = fre[a] - tr; fim[b] = fim[a] - ti; fre[a] += tr; fim[a] += ti;
+            const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+          }
+        }
+      }
+      const lo = Math.max(1, Math.round(150 * N / fs)), hi = Math.min(N / 2 - 1, Math.round(4000 * N / fs));
+      let lg = 0, ar = 0, c = 0;
+      for (let k = lo; k <= hi; k++) { const pw = fre[k] * fre[k] + fim[k] * fim[k] + 1e-20; lg += Math.log(pw); ar += pw; c++; }
+      return Math.exp(lg / c) / (ar / c);
     },
     pitch(end) {
       if (end < pwin) return 0;
@@ -1080,7 +1105,10 @@ function autoFrame(cap, t, db, f0, end) {            // called for every frame w
   if (db > th && prev <= th) cap.arm = 3;                              // the frame that first clears the recent noise level arms the trigger for 3 frames:
   if (!(cap.arm > 0)) return;                                           // in noise the first frame is mostly noise, and the voice shows a frame or two later
   if (db <= th) { cap.arm = 0; return; }
-  if (cap.an.lowFrac(end) < 0.8) { if (--cap.arm === 0) { meter.ignored++; showMeter(); } return; }   // broadband (rustle, hiss, breath), not a voiced start
+  // Several kinds of evidence, as in Roux et al. (2017) (four of six features there): is the energy in the voice range, is the spectrum peaked
+  // (low Wiener entropy: independent of loudness and gain), is there a clear pitch yet. Two of the three must agree within the 3 frames.
+  const votes = (cap.an.lowFrac(end) >= 0.8 ? 1 : 0) + (cap.an.entropy(end) < 0.4 ? 1 : 0) + (f0 > 0 ? 1 : 0);
+  if (votes < 2) { if (--cap.arm === 0) { meter.ignored++; showMeter(); } return; }   // rustle, hiss, breath: broadband and flat, not a voiced start
   cap.arm = 0;
   const P = cap.prof;
   if (P && profReady(P) && P.lvl != null && db < P.lvl - 14) return;   // far quieter than your own voice: someone else, or far away
@@ -1195,14 +1223,25 @@ function fixHist(cap, fromT, val) {
 // Sharpen a voice start from the 10 ms frame grid to the sample stream: find where a 2.5 ms
 // loudness window first rises above the noise floor + 6 dB and stays there.
 function refineOnset(cap, t) {
+  // Where speech really started, to a few ms. Like Chronset (Roux et al. 2017): once the voice is sure, walk back along the recording to where the
+  // loudness first rose clear of the noise, which also finds soft unvoiced starts (s, f) that come before the voiced part. "Clear of the noise"
+  // is measured against the quiet frames just before (the room can be much noisier than at start-up), and the walk stops at the previous
+  // speech. If the sound was already loud for the whole walk, the noise estimate is not trustworthy and the frame time is kept.
   const an = cap.an, fs = an.fs;
   const last = cap.fc - 1;
   const fT = last - Math.round((cap.hist.t[last % HN] - t) / 0.01);
   const leak = leakAt(cap, fT, 3);
   const w = Math.max(4, Math.round((leak > 0 ? 0.006 : 0.0025) * fs));
-  const thr = Math.pow(10, (cap.V.floor + 6) / 10) + KLEAK * leak;
+  // local noise: the 30th percentile of the unvoiced frames in the 0.3 s before this one (and after the last speech)
+  const q = [];
+  for (let i = fT - 3; i >= 0 && i > fT - 33 && i > cap.fc - HN; i--) { const j = i % HN; if (cap.hist.t[j] <= cap.lastOff + 0.05) break; if (!cap.hist.v[j]) q.push(cap.hist.db[j]); }
+  q.sort((x, y) => x - y);
+  const nz = q.length >= 8 ? Math.max(cap.V.floor, q[Math.floor(q.length * 0.3)]) : cap.V.floor;
+  const thr = Math.pow(10, (nz + 6) / 10) + KLEAK * leak;
   const kc = an.indexOf(t);
-  const k0 = kc - Math.round(0.025 * fs), k1 = Math.min(an.total - 1, kc + Math.round(0.025 * fs));
+  const kBack = Math.max(kc - Math.round(0.15 * fs), an.indexOf(cap.lastOff + 0.02));   // at most 150 ms back, never into the previous speech
+  // the candidate can be early (in a noisy room the frame backtrack used the start-up floor), so look forward as well as back
+  const k0 = Math.min(kBack, kc - Math.round(0.025 * fs)), k1 = Math.min(an.total - 1, kc + Math.round(0.09 * fs));
   if (k1 - k0 < w) return t;
   const ms = new Float64Array(k1 - k0 + 1);
   let sum = 0;
@@ -1211,7 +1250,13 @@ function refineOnset(cap, t) {
   for (let k = k0 + 1; k <= k1; k++) { const a = an.sample(k), b = an.sample(k - w); sum += a * a - b * b; ms[k - k0] = sum / w; }
   if (ms[ms.length - 1] <= thr) return t;
   let i = ms.length - 1;
-  while (i > 0 && ms[i - 1] > thr) i--;
+  const bridge = Math.round(0.015 * fs);                            // dips shorter than 15 ms (a stop closure, the join between a hiss and its vowel) do not end the start
+  for (;;) {
+    while (i > 0 && ms[i - 1] > thr) i--;
+    let j = -1; for (let g = 1; g <= bridge && i - 1 - g >= 0; g++) if (ms[i - 1 - g] > thr) { j = i - 1 - g; break; }
+    if (j < 0) break;
+    i = j;
+  }
   if (i === 0) return t;
   return an.timeOf(k0 + i - w / 2);
 }

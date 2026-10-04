@@ -64,6 +64,30 @@ def noisy(with_voice):
 save('test_rustle.wav', noisy(False))
 save('test_noisy_voice.wav', noisy(True))
 
+# onsets that start with a soft hiss before the voice (like "s" or "f"): the same six times as test_voice.wav, but bursts 1, 3 and 5 begin with
+# 90 ms of band-limited noise (4-6 kHz, rms about 0.012, soft but clear of the room noise) and the voiced part follows. The speech starts at the hiss.
+x = np.random.default_rng(7).normal(0, 0.002, n)
+rr = np.random.default_rng(31)
+for k, (o, Ln) in enumerate(zip(ONSETS, LENGTHS)):
+    if k % 2 == 0:
+        m = int(0.09 * FS); sp = np.fft.rfft(rr.normal(0, 1, m)); fr = np.fft.rfftfreq(m, 1 / FS); sp[(fr < 4000) | (fr > 6000)] = 0
+        h = np.fft.irfft(sp, m); h = h / np.abs(h).max() * 0.035 * np.minimum(1, np.arange(m) / (0.01 * FS)) * np.minimum(1, (m - np.arange(m)) / (0.01 * FS))
+        i = int(o * FS); x[i:i + m] += h
+        burst(x, o + 0.09, Ln, 140, 0.145)
+    else:
+        burst(x, o, Ln, 140, 0.145)
+save('test_fric_onset.wav', x)
+
+# the onset checks need the exact position of the file inside MICE's recording, which differs a little on every run, so each of the three
+# onset files also carries a sync pulse at 5.2 s (two samples at 0.6; it has no pitch, so it is not voice).
+def with_pulse(x):
+    y = x.copy(); i = int(5.2 * FS); y[i] += 0.6; y[i + 1] += 0.6; return y
+save('onset_noisy.wav', with_pulse(noisy(True)))
+save('onset_fric.wav', with_pulse(x))
+
 make('test_voice.wav', 13.5, 0, False)
+xc = np.random.default_rng(7).normal(0, 0.002, int(FS * 13.5))
+for o, Ln in zip(ONSETS, LENGTHS): burst(xc, o, Ln, 140, 0.145)
+save('onset_clean.wav', with_pulse(xc))
 make('test_voice_talk.wav', 16.5, 3, True)
 print('made test_voice.wav and test_voice_talk.wav')
