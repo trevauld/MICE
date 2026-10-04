@@ -85,6 +85,38 @@ def with_pulse(x):
 save('onset_noisy.wav', with_pulse(noisy(True)))
 save('onset_fric.wav', with_pulse(x))
 
+# Files for the calibrated auto cue (32 s): the app starts and measures the room (quiet until 11 s), the user speaks for the voice measurement
+# (eight 0.5 s bursts from 11 to 18 s), then the test content starts at 22 s.
+#   cal_voice_quiet / cal_voice_noisy   six voice bursts at 22.0, 23.0, 23.9, 25.1, 26.3, 27.2 s, in a quiet room / one that gets 20 dB noisier at 4 s with rustles
+#   cal_rustle_noisy                    noisy room, no voice after the calibration speech: rustles only
+#   cal_slam_quiet                      a clap at 22 s and a thump at 25 s
+#   cal_hiss_quiet                      hiss rising from 22 s to 26 s like a phone raising its gain, then steady
+#   cal_close                           noise as loud as the voice (about 3 dB apart): the setup must refuse and the auto cue must never start
+def cal_file(name, env, content):
+    NN = int(FS * 32); t = np.arange(NN) / FS
+    r = np.random.default_rng(sum(map(ord, name)))
+    x = r.normal(0, 0.002, NN)
+    def rustles(a, b, amp=0.06):
+        tt = a
+        while tt < b:
+            L = int(r.uniform(0.02, 0.05) * FS); i = int(tt * FS); x[i:i + L] += r.normal(0, amp, L) * np.hanning(L); tt += r.uniform(0.7, 1.4)
+    if env == 'noisy':
+        amb = r.normal(0, 1, NN) * 0.016 * (1 + 0.5 * np.sin(2 * np.pi * 0.45 * t)); amb[t < 4.0] = 0; x += amb; rustles(4.4, 31.0)
+    if env == 'close':
+        amb = r.normal(0, 1, NN) * 0.1; amb[t < 4.0] = 0; x += amb
+    for k in range(8): burst(x, 11.0 + k, 0.5, 140, 0.145)
+    if content == 'voice':
+        for o, Ln in zip(ONSETS, LENGTHS): burst(x, o + 16.0, Ln, 140, 0.145)
+    if content == 'rustle' and env != 'noisy': rustles(22.0, 31.0)
+    if content == 'slam':
+        i = int(22.0 * FS); x[i:i + int(0.12 * FS)] += r.normal(0, 0.1, int(0.12 * FS)) * np.hanning(int(0.12 * FS))
+        j = int(25.0 * FS); tt = np.arange(int(0.3 * FS)) / FS; x[j:j + len(tt)] += 0.2 * np.sin(2 * np.pi * 60 * tt) * np.exp(-tt * 12)
+    if content == 'hiss':
+        g = np.interp(t, [0, 22, 26, 32], [0, 0, 0.03, 0.03]); x += r.normal(0, 1, NN) * g
+    save(name, x)
+cal_file('cal_voice_quiet.wav', 'quiet', 'voice'); cal_file('cal_voice_noisy.wav', 'noisy', 'voice'); cal_file('cal_rustle_noisy.wav', 'noisy', 'rustle')
+cal_file('cal_slam_quiet.wav', 'quiet', 'slam'); cal_file('cal_hiss_quiet.wav', 'quiet', 'hiss'); cal_file('cal_close.wav', 'close', 'voice')
+
 make('test_voice.wav', 13.5, 0, False)
 xc = np.random.default_rng(7).normal(0, 0.002, int(FS * 13.5))
 for o, Ln in zip(ONSETS, LENGTHS): burst(xc, o, Ln, 140, 0.145)

@@ -56,16 +56,17 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   durations and fade-ins from my CMU Arctic measurement; the two agree (see research/NOTES.md). Level and brightness are deliberately softer than
   the data (the Hiss checkbox and level slider in Cue sound, shown only for the Dynamic voice; default -16 dB; hiss centre capped at 4.8 kHz) because real sibilants sounded like a thin whistle on a headset. The burst "t" is an estimate.
   The paper's PDF is kept out of git and the deploy (`*.pdf` in .gitignore and .assetsignore).
-- **Auto cue (experimental, `autoFrame`, `autoStart`, `autoEnd`, `meter`):** off by default and never remembered. When on, a frame that clears the *recent* noise level by
-  `S.sens` arms the trigger for 3 frames; the first of those with at least 2 of 3 votes (energy mostly in the voice range `lowFrac` >= 0.8; a peaked spectrum, Wiener entropy
-  < 0.4, which is independent of loudness and gain and measured about 0.06 to 0.34 on voice onsets against 0.44 to 0.65 on rustle; a clear pitch) starts the
-  cue through the normal `press()`. A manual press takes over (`cue.auto = false`). Two frames with a clear pitch (within 8 semitones of the learned centre) confirm it; none
-  within 0.25 s drops it, counts a false start and doubles the wait before the next start (0.6 s up to 3 s, forgotten after 10 quiet seconds). The cue is released with the voice
-  (`voiceOff`), after 0.5 s of nothing, or after 8 s. Lessons: (1) the first version compared with the start-up floor; once a real room, a cord or the phone's microphone gain was
-  12 dB noisier it fired on every rustle and, with the level always above the threshold, never saw a real start (the first version's tests used steady noise, so they missed it).
-  The trigger now follows the 30th percentile of the last 2 s of quiet frames. (2) Zero-crossing rate is wrong at the trigger: that first frame is mostly room noise.
-  Energy-weighted spectral share is right. It cannot react to unvoiced starts (s, f) and, because it can only react after the voice has begun, never to a block.
-  Automatic presses do not count as holds for learning (`p.auto`). Test audio: `test_rustle.wav`, `test_noisy_voice.wav`, `test_slam.wav`.
+- **Auto cue (experimental, `calStart`/`calFrame`/`calFinish`, `autoFrame`, `autoStart`, `autoEnd`, `meter`):** off by default and never remembered. Ticking it (while listening, or at the next
+  start) first runs a setup, because a guessed "how much louder than the room is speech" failed on a real phone (21 of 50 starts false, real speech missed): (1) 4 s of the room (median, 99th
+  percentile), (2) about 2 s of voiced speech (level, pitch range, Wiener entropy, voice-range share). The setup refuses if the quietest speech is less than 6 dB above the loudest room
+  noise, with advice. The margin `M` sits between the room's own peaks and the quietest speech; the pitch range, a ceiling (a clap) and the entropy / voice-range limits come from the user's
+  voice. Everything is measured against the recent noise level (30th percentile of the last 2 s of quiet frames), so a change in phone gain does not break it. Nothing starts until the setup is
+  ready. A frame that clears `nz + M` only arms the trigger; in the next frames (still over the line) two of three votes (voice-range energy, peaked spectrum, a pitch inside the user's range)
+  start the cue through the normal `press()`. A manual press takes over (`cue.auto = false`). Two frames with a pitch in range confirm; none within 0.25 s drops it, counts a false start,
+  keeps the evidence (`meter.lastFalse`, shown in the meter) and doubles the wait before the next start (0.6 s up to 3 s, forgotten after 10 quiet seconds). The cue is released with the voice
+  (`voiceOff`), after 0.5 s of nothing, or after 8 s. Lessons: the first version compared with the start-up floor and fired on every rustle in a noisier room; zero-crossing rate is wrong at the
+  trigger (the first frame is mostly room noise). It cannot react to unvoiced starts (s, f) and, because it can only react after the voice has begun, never to a block. Automatic presses
+  do not count as holds for learning (`p.auto`). Test audio: `cal_*.wav` (quiet while starting, room measured, speech from 11 s, test content from 22 s).
   `refineOnset` (the voice-onset reference for the meter and for the blue lines) follows Chronset (Roux et al. 2017): from the confirmed voice it walks back along the recording to where the
   loudness first rose clear of the noise, up to 150 ms and never into the previous speech, bridging dips under 15 ms. "Clear of the noise" is 6 dB over the quiet frames just before (not the
   start-up floor), and it looks forward as well as back because the frame candidate can be early in noise. Against known truth (`tests/onset_check.js`, located with a sync pulse): clean 0 ms,
@@ -74,7 +75,7 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   The meter records the start delay inside MICE: the cue's start (the gate marker, sample-accurate) minus the refined voice onset (`refineOnset`), both from the
   recording, as a running mean with last, min, max, false starts, ignored and a reset. It adds the browser's reported output delay (`ctx.outputLatency + baseLatency`),
   or half the bleed round trip, to estimate the time until the user hears the cue. In a noisy room `refineOnset` has less to go on, so the meter errs on the long side.
-  Headless Chromium: 12 ms start delay (7 to 16) in a quiet room, about 55 ms with 20 dB more noise. `tests/auto_check.js`.
+  Headless Chromium: about 25 ms start delay (20 to 29) in a quiet room (the two-frame sustain adds 10 ms), 30 ms with 20 dB more noise. `tests/auto_check.js`.
 - **Screen awake (`keepAwake`):** a screen wake lock is held while listening (a locked phone stops the microphone) and re-requested when the page becomes visible again; if the browser has none, the status line says to set Auto-Lock to Never. Installed iOS web apps only got wake lock support in iOS 18.4; older versions need Auto-Lock off.
 - **Other:** "Match my voice" sets the note to the median speaking pitch. `draw` renders the 8 s timeline. `window.__mice` is the debug hook.
 
