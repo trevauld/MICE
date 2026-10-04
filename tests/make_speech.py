@@ -1,5 +1,6 @@
 # Creates test_speech.wav: speech-like audio with known properties, for checking that the Dynamic voice learns them.
 #   pitch centre 190 Hz, 5 syllables a second, phrases of 6 syllables with 0.5 s pauses, formants 15% above a typical adult
+#   about 30% of syllables start with a 90 ms 's'-like hiss centred at 5.5 kHz
 #   Speech starts at 4 s and lasts 18 s.
 import os, wave
 import numpy as np
@@ -27,6 +28,13 @@ def render(t0, dur, f_a, f_b, v_a, v_b, amp_a, amp_b):
     amp = amp_a + (amp_b - amp_a) * (0.5 - 0.5 * np.cos(np.pi * u))
     i = int(t0 * FS); x[i:i + n] += out / 6 * amp * 1.0
 
+def hiss(t0, dur, fc=5500, lvl=0.05):
+    # band-limited noise (4-7 kHz) like an 's'
+    n = int(dur * FS); sp = np.fft.rfft(rng.normal(0, 1, n)); fr = np.fft.rfftfreq(n, 1 / FS)
+    sp[(fr < fc - 1500) | (fr > fc + 1500)] = 0
+    h = np.fft.irfft(sp, n); h = h / np.abs(h).max() * lvl * np.hanning(n)
+    i = int(t0 * FS); x[i:i + n] += h
+
 t = T0; f_prev = F0C; v_prev = VOW[0]; a_prev = 0.3
 while t < T0 + DUR:
     for i in range(PHRASE):
@@ -34,9 +42,11 @@ while t < T0 + DUR:
         f = F0C * 2 ** ((2.5 * np.sin(np.pi * (i + .5) / PHRASE) + rng.normal(0, .8)) / 12)
         v = VOW[rng.integers(len(VOW))]
         a = 1.0 if i % 1 == 0 else 0.7
-        render(t, d, f_prev, f, v_prev, v, a_prev, a)
+        h = 0.09 if rng.random() < 0.3 else 0
+        if h: hiss(t, h)
+        render(t + h, d, f_prev, f, v_prev, v, a_prev, a)
         f_prev, v_prev, a_prev = f, v, 0.55 if rng.random() < .5 else 0.8
-        t += d
+        t += d + h
     t += 0.5
     a_prev = 0.3
 with wave.open(os.path.join(HERE, 'test_speech.wav'), 'wb') as w:

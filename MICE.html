@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v9</div>
+  <div class="ver" id="ver">MICE v10</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -332,6 +332,15 @@ const NEUTRAL = [[600, 1250, 2500], [520, 1500, 2500], [450, 1050, 2450], [560, 
 // consonant-like gestures: formant targets (Hz, before scaling) for the first ~30 ms, how low the loudness dips,
 // and how far the top end closes (a nasal is dull).
 const GESTURES = [null, { f: [280, 1100, 2300], dip: 0.5, lp: 1200 }, { f: [350, 900, 2200], dip: 0.7, lp: 2600 }, { f: [450, 1500, 2600], dip: 0.38, lp: 2200 }];
+// Real consonants: bands of noise that bypass the vowel filters. fc is relative to the sibilance centre ("s"), lvl is the noise
+// level against the vowels, closure is a short silence before a burst. s and sh are the loud ones; f/th are faint.
+const NOISY = [
+  { name: 's',  fcr: 1.0,  Q: 1.4, lvl: 0.3, dur: 0.09,  closure: 0,    f: [320, 1400, 2500], dip: 0.25, lp: 3000, w: 4 },
+  { name: 'sh', fcr: 0.62, Q: 1.1, lvl: 0.25, dur: 0.1,  closure: 0,    f: [320, 1700, 2400], dip: 0.3, lp: 3000, w: 2 },
+  { name: 'f',  fcr: 0.8,  Q: 0.5, lvl: 0.1, dur: 0.07, closure: 0,    f: [350, 1200, 2400], dip: 0.5, lp: 3000, w: 2 },
+  { name: 'z',  fcr: 0.95, Q: 1.3, lvl: 0.12, dur: 0.08,  closure: 0,    f: [300, 1300, 2500], dip: 0.55, lp: 3000, w: 1 },
+  { name: 't',  fcr: 0.55, Q: 0.9, lvl: 0.33, dur: 0.02, closure: 0.04, f: [400, 1600, 2600], dip: 0.08, lp: 3000, w: 3 },
+];
 function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   const R = Math.random;
   const tn = tune || { center: f0, spread: 2.5, rate: 4.5, phrase: 6, s1: 1, s2: 1 };
@@ -358,6 +367,10 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   noise(20, 2, am.gain);                                 // shimmer: slow random loudness wobble, a few percent
   const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(3000, t); lp.Q.value = 0.5;
   am.connect(lp); lp.connect(amp);
+  const fnz = c.createBufferSource(); fnz.buffer = longNoise; fnz.loop = true; fnz.__started = true; srcs.push(fnz); fnz.start(t, R() * 2.5);
+  const nb = c.createBiquadFilter(); nb.type = 'bandpass'; nb.frequency.value = 6000; nb.Q.value = 1.2;
+  const fg = c.createGain(); fg.gain.setValueAtTime(0, t); fnz.connect(nb); nb.connect(fg); fg.connect(amp);   // consonant noise joins after the low-pass
+  const sibFc = tn.sibFc || 6000, pFric = tn.fric != null ? tn.fric : 0.2;
   const Q = [4, 5, 6], G = [1, 0.55, 0.25];
   const fl = VT[0].map((f, i) => {
     const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.setValueAtTime(f, t); b.Q.value = Q[i];
@@ -386,23 +399,39 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
     const hz = base * Math.pow(2, semi / 12);
     glide(pitch.offset, st.hz, hz, ts, st.first ? 0.02 : dur * 0.7); st.hz = hz;
     // vowel (and a consonant-like gesture before it)
-    const g = st.first ? null : GESTURES[Math.floor(R() * GESTURES.length)];
+    let g = null;
+    if (!st.first) {
+      if (R() < pFric) { let tot = 0; NOISY.forEach((x) => { tot += x.w; }); let r = R() * tot; g = NOISY[0]; for (const x of NOISY) { r -= x.w; if (r <= 0) { g = x; break; } } }
+      else g = GESTURES[Math.floor(R() * GESTURES.length)];
+    }
     if (!st.first) {
       st.vowel = (R() < 0.65) ? pickVowel(st.vowel) : st.vowel;
-      const gd = g ? 0.03 : 0;
+      const gd = g ? (g.dur ? g.dur + g.closure : 0.03) : 0;
       fl.forEach((b, i) => {
         const to = VT[st.vowel][i] * (1 + (R() - 0.5) * 0.08);
         let from = st.f[i];
         if (g) { const gf = g.f[i] * sc[i]; glide(b.frequency, from, gf, ts, gd); from = gf; }
-        glide(b.frequency, from, to, ts + gd, dur * 0.85 - gd); st.f[i] = to;
+        glide(b.frequency, from, to, ts + gd, Math.max(0.04, dur * 0.85 - gd)); st.f[i] = to;
       });
     }
     // loudness: dip for the gesture, swell to this syllable's level (from the learned phrase shape if known), ease off
     const peak = tn.ampShape ? 0.55 + 0.45 * Math.pow(10, shape(tn.ampShape, ph) / 20) / Math.pow(10, Math.max.apply(null, tn.ampShape) / 20) : 1;
     const endA = (last ? 0.5 : 0.78) * peak;
-    if (g) { glide(am.gain, st.a, g.dip * peak, ts, 0.03); glide(am.gain, g.dip * peak, peak, ts + 0.03, dur * 0.4); glide(lp.frequency, st.lp, g.lp, ts, 0.03); glide(lp.frequency, g.lp, 3000, ts + 0.03, 0.06); st.lp = 3000; }
+    let fall0 = ts + dur * 0.4;
+    if (g) {
+      const gd = g.dur ? g.dur + g.closure : 0.03;
+      const upDur = Math.max(0.04, dur * 0.4 - gd * 0.5);
+      glide(am.gain, st.a, g.dip * peak, ts, 0.02); glide(am.gain, g.dip * peak, peak, ts + gd, upDur); fall0 = ts + gd + upDur;
+      glide(lp.frequency, st.lp, g.lp, ts, 0.03); glide(lp.frequency, g.lp, 3000, ts + gd, 0.06); st.lp = 3000;
+      if (g.dur) {                                    // the consonant noise itself: a quick rise, a hold, a quick fall
+        const t0 = ts + g.closure, lv = g.lvl * peak;
+        nb.frequency.setValueAtTime(sibFc * g.fcr * (0.92 + R() * 0.16), ts); nb.Q.setValueAtTime(g.Q, ts);
+        fg.gain.setValueAtTime(0, t0); fg.gain.linearRampToValueAtTime(lv, t0 + Math.min(0.012, g.dur * 0.4));
+        fg.gain.setValueAtTime(lv, t0 + g.dur * 0.55); fg.gain.linearRampToValueAtTime(0, t0 + g.dur);
+      }
+    }
     else { glide(am.gain, st.a, peak, ts, dur * 0.4); if (st.lp !== 3000) { glide(lp.frequency, st.lp, 3000, ts, 0.05); st.lp = 3000; } }
-    glide(am.gain, peak, endA, ts + dur * 0.4, dur * 0.6); st.a = endA;
+    glide(am.gain, peak, endA, fall0, Math.max(0.04, ts + dur - fall0)); st.a = endA;
     st.next = ts + dur + (last ? 0.08 + R() * 0.14 : 0);
     if (last) { st.i = 0; st.N = Math.max(3, Math.round(tn.phrase + (R() - 0.5) * 3)); } else st.i++;
     st.first = false;
@@ -634,6 +663,14 @@ function makeAnalyzer(sr) {
       }
       return n === 3;
     },
+    // Zero crossings per sample over the last 20 ms: high for hiss-like sounds (s, sh, f), low for vowels.
+    zcr(end) {
+      const n = win;
+      if (end < n + 1) return 0;
+      let c = 0, prev = ring[(end - n) & MASK];
+      for (let i = 1; i <= n; i++) { const x = ring[(end - n + i) & MASK]; if ((x > 0) !== (prev > 0)) c++; prev = x; }
+      return c / n;
+    },
     pitch(end) {
       if (end < pwin) return 0;
       let mean = 0;
@@ -704,7 +741,7 @@ function quantile(arr, q) { if (!arr.length) return null; const a = Float64Array
 const NB = 8; // bins across a phrase
 function newProfile() {
   return { sec: 0, f: [], fn: 0, syl: 0, segN: 0, segSum: 0, valley: 0, lastPk: 0, s0: null, s1: null, s2: null, lastFc: -9,
-    fa: [], fan: 0, fm: [0, 0, 0], cur: null, shN: 0, pSh: new Float64Array(NB), pCt: new Float64Array(NB), aSh: new Float64Array(NB), aCt: new Float64Array(NB), cache: null };
+    fa: [], fan: 0, fm: [0, 0, 0], fr: 0, fz: 0, fzSum: 0, fricEv: 0, cur: null, shN: 0, pSh: new Float64Array(NB), pCt: new Float64Array(NB), aSh: new Float64Array(NB), aCt: new Float64Array(NB), cache: null };
 }
 function profReady(P) { return !!P && P.sec >= 5.5 && P.fn >= 200; }
 function finishSegment(P) {                       // fold one finished stretch of speech into the phrase shapes
@@ -720,7 +757,7 @@ function finishSegment(P) {                       // fold one finished stretch o
   }
   P.shN++;
 }
-function learn(cap, db, f0, end, floor) {
+function learn(cap, db, f0, end, floor) {   // floor: the room level in dB
   const P = cap.prof;
   if (cap.fc !== P.lastFc + 1) { P.s0 = P.s1 = P.s2 = null; P.valley = db; finishSegment(P); }
   if (!P.cur) P.cur = { db: [], f: [] };
@@ -732,6 +769,10 @@ function learn(cap, db, f0, end, floor) {
   }
   P.valley = Math.min(P.valley, s);
   P.s2 = P.s1; P.s1 = s; P.s0 = s;
+  if (f0 <= 0 && db > floor + 8) {                  // unpitched but loud inside speech: a fricative (s, sh, f) shows as a high crossing rate
+    const z = cap.an.zcr(end);
+    if (z > 0.22) { P.fr++; P.fz++; P.fzSum += z; } else { if (P.fr >= 4) P.fricEv++; P.fr = 0; }
+  } else { if (P.fr >= 4) P.fricEv++; P.fr = 0; }
   if (f0 > 0) {
     if (P.f.length < 3000) P.f.push(f0); else P.f[P.fn % 3000] = f0;
     P.fn++;
@@ -773,6 +814,10 @@ function tuneFor() {
   const phrase = Math.max(3, Math.min(10, Math.round(seg * rate)));
   const sc = Math.max(0.9, Math.min(1.2, Math.pow(center / 130, 0.22)));          // fallback when no formants were measured: shorter tract for higher voices
   const t = { center, spread, rate, phrase, s1: sc, s2: sc };
+  if (P.fricEv >= 3) {                                                            // how often syllables carry frication, and where the hiss sits
+    t.fric = Math.max(0.1, Math.min(0.6, P.fricEv / Math.max(1, P.sec * rate)));
+    t.sibFc = Math.max(3500, Math.min(8000, (P.fzSum / Math.max(1, P.fz)) * cap.an.fs / 2));
+  }
   const v = vowelsFrom(P.fa);
   if (v) { t.vowels = v.map((x) => x.f); t.vowelW = v.map((x) => x.w); }
   if (P.shN >= 3 && P.pCt.every((n) => n > 20)) {                                  // how pitch and loudness run over one phrase

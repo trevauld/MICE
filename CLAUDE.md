@@ -33,10 +33,12 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   quiet, finds the path delay and fits a 6 ms FIR; the analyzer subtracts gain × FIR(cue) from the mic; `armGain`/`checkGain`
   follow volume changes at each press. This stops the app learning its own tone as the user's voice.
 - **Dynamic voice (`dynamicCue`):** a soft, babbling, Sims-like voice. Glottal-like source with jitter, shimmer and
-  breath noise through three formant filters; phrases of syllables, each with a light consonant-like gesture
-  (`GESTURES`) then a central vowel, all on eased glides. It schedules ahead with a timer that `stopCue` clears.
+  breath noise through three formant filters; phrases of syllables, each starting with a consonant-like gesture
+  then a central vowel, all on eased glides. Gestures are either formant dips (`GESTURES`: nasal, glide, soft stop) or real
+  consonant noise (`NOISY`: s, sh, f, z, t) from a band of noise that bypasses the vowel filters, so there is sibilance. It schedules ahead with a timer that `stopCue` clears.
 - **Learning (`newProfile`, `learn`, `tuneFor`, `vowelsFrom`):** after about 5.5 s of detected speech it uses the user's
-  median pitch and range, syllable rate (loudness peaks), phrase length and measured vowels (LPC formants, k-means to 5
+  median pitch and range, how often syllables carry frication and where the hiss sits (zero-crossing rate of loud unpitched
+  frames inside speech), syllable rate (loudness peaks), phrase length and measured vowels (LPC formants, k-means to 5
   targets pulled 35% toward the average). After a few finished phrases it also uses the user's pitch shape and loudness
   shape over a phrase. Until then it uses the chosen note and defaults. The profile lives on the capture (it is lost when
   listening stops) and a failure in `learn` switches learning off without touching detection.
