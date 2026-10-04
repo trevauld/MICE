@@ -46,8 +46,10 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   peaks), phrase length and mean measured formants (LPC) for the vowel scale. After a few finished phrases it also uses the user's pitch
   shape and loudness shape over a phrase. Until then it uses the chosen note and defaults. The profile lives on the capture (it is lost
   when listening stops) and a failure in `learn` switches learning off without touching detection.
-- **Not done yet:** consonants are still hand-tuned (soft, nothing above 4.8 kHz). Next: measure fricative levels, durations and spectra
-  from a small speech corpus slice (for example CMU Arctic) and replace the hand-tuned `NOISY` values.
+- **Consonants (`NOISY`):** rate, s/sh mix, durations and fade-ins are measured from CMU Arctic speaker slt (361 recordings; see
+  research/NOTES.md). Level and brightness are deliberately softer than the data (`SIB_SOFT_DB`, hiss centre capped at 4.8 kHz) because real
+  sibilants sounded like a thin whistle on a headset. The f, z and t numbers are estimates. Still wanted: published fricative tables
+  (Jongman, Wayland and Wong 2000, JASA 108(3), 1252-1263).
 - **Other:** "Match my voice" sets the note to the median speaking pitch. `draw` renders the 8 s timeline. `window.__mice` is the debug hook.
 
 ## UI
