@@ -32,6 +32,8 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
 - **Cue bleed (the cue leaking into the mic):** at start `measureBleed` plays a short hiss and the cue while the user is
   quiet, finds the path delay and fits a 6 ms FIR; the analyzer subtracts gain × FIR(cue) from the mic; `armGain`/`checkGain`
   follow volume changes at each press. This stops the app learning its own tone as the user's voice.
+  The probe is located in the recording from the recorded copy of the cue, not from the audio clock (they disagreed on iOS at the first start and
+  caused "length cannot be negative"); a failed measurement is skipped with a message (`bleedSkipped`) and never stops listening. Test switch `?skew=S`.
 - **Dynamic voice (`dynamicCue`):** a soft, babbling, Sims-like voice. Glottal-like source with jitter, shimmer and
   breath noise through three formant filters; phrases of syllables, each starting with a consonant-like gesture
   then a central vowel, all on eased glides. Gestures are either formant dips (`GESTURES`: nasal, glide, soft stop) or real

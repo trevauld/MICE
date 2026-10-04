@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v17</div>
+  <div class="ver" id="ver">MICE v18</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -616,6 +616,7 @@ const forceScript = /[?&]capture=script\b/.test(location.search);
 const qp = new URLSearchParams(location.search);
 const SIM = { gain: +qp.get('simbleed') || 0, delay: +qp.get('simdelay') || 20, odd: qp.get('simodd') === '1' };
 const NOCOMP = qp.get('nocomp') === '1';
+const SKEW = +qp.get('skew') || 0;   // test only: pretend the audio clock and the sample count disagree by this many seconds
 const KLEAK = 4; // subtract four times the predicted bleed power (6 dB safety margin)
 async function loadWorklet(c) {
   const urls = ['data:text/javascript;base64,' + btoa(WORKLET)];
@@ -1110,7 +1111,10 @@ function micError(err) {
   else if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) setStatus('Microphone access was blocked. Allow it from the icon in the address bar, then try again.', true);
   else if (err && err.name === 'NotFoundError') setStatus('No microphone was found. Plug one in and try again.', true);
   else if (err && err.name === 'OverconstrainedError') { setStatus('The chosen microphone is not available. Pick another one or the default.', true); S.mic = ''; store.set('mic', ''); }
-  else setStatus('The microphone could not start' + (err && err.message ? ': ' + err.message : '.'), true);
+  else {
+    const where = err && err.stack ? (String(err.stack).match(/(?:^|\n)\s*(?:at\s+)?([A-Za-z_$][\w$.]*)/g) || []).slice(0, 2).map((x) => x.trim().replace(/^at\s+/, '')).join(' < ') : '';
+    setStatus('The microphone could not start' + (err && err.message ? ': ' + err.message : '.') + (where ? ' [' + where + ']' : ''), true);
+  }
 }
 // A short soft hiss through the headphones: broadband, so the cue-to-microphone path can be learned at all pitches.
 function playProbe(t, dur) {
@@ -1154,14 +1158,29 @@ async function bleedAttempt(cap) {
   if (capture !== cap) return null;
   calcStart = performance.now();
   const maxLag = Math.round(lagS * fs), L = Math.round(0.006 * fs), pre = Math.round(0.001 * fs);
-  const kS = Math.max(an.total - Math.round(5 * fs), an.indexOf(t0) - Math.round(0.1 * fs)), kE = an.total - 1;
+  // Where in the recording the probe starts. The clock says (t0 - start) * fs, but on some devices the clock and the sample count do not
+  // agree (seen on iOS at the first start), so the probe is also found in the recorded copy of the cue, and that wins if they differ.
+  const clockIdx = an.indexOf(t0) + Math.round(SKEW * fs);
+  let kp = clockIdx;
+  {
+    const lo = Math.max(0, an.total - Math.round(5 * fs));
+    let pk = 0; for (let k = lo; k < an.total; k++) { const a = Math.abs(an.ref(k)); if (a > pk) pk = a; }
+    if (pk < 0.002) return { fail: 'no cue in the recording' };
+    let on = -1; for (let k = lo; k < an.total; k++) if (Math.abs(an.ref(k)) > 0.15 * pk) { on = k; break; }
+    if (on < 0) return { fail: 'no cue in the recording' };
+    const found = on - Math.round(0.0015 * fs);                       // the probe fades in over 10 ms; back up to its start
+    if (Math.abs(found - clockIdx) > Math.round(0.025 * fs)) { kp = found; cap.clockOff = (clockIdx - found) / fs; }
+  }
+  const kS = Math.max(an.total - Math.round(5 * fs), kp - Math.round(0.1 * fs)), kE = an.total - 1;
   const N = kE - kS + 1, yOff = maxLag + L + 8;
+  if (!(N > Math.round(2 * fs))) return { fail: 'too little audio recorded (' + N + ' samples)' };
   const X = new Float64Array(N), Y = new Float64Array(N + yOff);
   for (let i = 0; i < N; i++) X[i] = an.raw(kS + i);
   for (let i = -yOff; i < N; i++) Y[i + yOff] = an.ref(kS + i);
   const pf = Math.pow(10, cap.V.floor / 10);
   // 1) delay, from the hiss: a coarse search on 4x-decimated signals, then a fine one around the peak
-  const pS = Math.max(0, an.indexOf(t0) - kS), pE = Math.min(N - 1, an.indexOf(t0 + probeDur) - kS + maxLag);
+  const pS = Math.max(0, kp - kS), pE = Math.min(N - 1, kp + Math.round(probeDur * fs) - kS + maxLag);
+  if (!(pE - pS > 8 * 4)) return { fail: 'probe not inside the recording' };
   const corrAt = (d) => {
     let num = 0, ex = 0, ey = 0;
     for (let n = pS; n <= pE; n++) { const x = X[n], y = Y[n - d + yOff]; num += x * y; ex += x * x; ey += y * y; }
@@ -1194,7 +1213,7 @@ async function bleedAttempt(cap) {
   // 3) 10 ms block levels: raw, after cancelling, predicted bleed, cue (at the path delay)
   const B = Math.round(0.01 * fs), seg = { probe: [], cue: [], gap: [], all: [] };
   const Dseg = best >= 0.15 ? D : 0; // without a match the delay is unknown; assume a short one
-  const refT = (n) => an.timeOf(kS + n) - Dseg / fs; // cue time that reaches the microphone at sample n
+  const refT = (n) => t0 + (kS + n - kp - Dseg) / fs; // cue time that reaches the microphone at sample n
   for (let n0 = 0; n0 + B <= N; n0 += B) {
     let xp = 0, ep = 0, hp = 0, yp = 0;
     for (let n = n0; n < n0 + B; n++) {
@@ -1225,6 +1244,11 @@ async function bleedAttempt(cap) {
   else if (Math.max(db(S2.all.xp), beforeDb, db(S2.probe.xp)) >= 6) dirtyGap = true;
   return { best, D, dLo, h, L, fs, pf, found, beforeDb, afterDb, gapDb, probeResDb, dirtyGap, dirty: dirtyGap || dirtyLeft, cue: S2.cue, calcMs: performance.now() - calcStart };
 }
+// The measurement could not be made on this device: listen without cancelling, and say so.
+function bleedSkipped(cap, why) {
+  cap.V.state = 'quiet'; cap.bleed = null; cap.an.setCanceller(null);
+  $('bleedMsg').textContent = 'Cue bleed could not be measured here (' + why + '), so MICE listens without cancelling it. Listening works as usual, but a cue that leaks into the microphone may be picked up as your voice: keep the volume moderate.';
+}
 // Measure the cue bleed (once more if other sound got in the way) and set up cancelling.
 async function measureBleed(cap) {
   const an = cap.an;
@@ -1233,11 +1257,13 @@ async function measureBleed(cap) {
   cap.V.state = 'hold';
   const A1 = await bleedAttempt(cap);
   if (!A1) { cap.V.state = 'quiet'; return; }
+  if (A1.fail) return bleedSkipped(cap, A1.fail);
   let A = A1, A2 = null, tries = 1;
   if (A1.dirty) {
     setStatus('Some other sound was picked up. Measuring again, please stay quiet…');
     A2 = await bleedAttempt(cap);
     if (!A2) { cap.V.state = 'quiet'; return; }
+    if (A2.fail) return bleedSkipped(cap, A2.fail);
     tries = 2;
     // keep the cleaner of the two: less sound in the gaps, then less left over during the cue
     if (!A2.dirty || A2.gapDb < A1.gapDb - 3 || (Math.abs(A2.gapDb - A1.gapDb) <= 3 && A2.afterDb <= A1.afterDb)) A = A2;
@@ -1298,7 +1324,7 @@ async function startSession() {
     }
     if (!S.muted) {
       setStatus('You will hear a short hiss and the cue. Stay quiet while MICE learns how much of it reaches the microphone…');
-      await measureBleed(cap);
+      try { await measureBleed(cap); } catch (err) { if (capture !== cap) throw err; console.error(err); bleedSkipped(cap, (err && err.message) || 'error'); }   // never let this stop the listening
       if (capture !== cap) throw new Error('stopped');
     } else {
       cap.bleed = null;

@@ -12,6 +12,8 @@ const CASES = [
   { name: 'bleed', wav: 'test_voice.wav', query: '?simbleed=0.08&simdelay=17.3', voice: true },
   { name: 'bleed_strong', wav: 'test_voice.wav', query: '?simbleed=0.35&simdelay=23.1', voice: true },
   { name: 'bleed_weak', wav: 'test_voice.wav', query: '?simbleed=0.02&simdelay=12.7', voice: true },
+  { name: 'clock_off_by_3s', wav: 'test_voice.wav', query: '?simbleed=0.08&simdelay=17.3&skew=3', voice: true },
+  { name: 'clock_off_by_minus_3s', wav: 'test_voice.wav', query: '?simbleed=0.08&simdelay=17.3&skew=-3', voice: true },
   { name: 'dynamic_voice_cue', wav: 'test_voice.wav', query: '?simbleed=0.08&simdelay=17.3', voice: true, timbre: 'dynamic' },
   { name: 'silence_with_cue', wav: 'test_silence.wav', query: '?simbleed=0.08&simdelay=17.3', voice: false },
   { name: 'dynamic_cue_leak_no_voice', wav: 'test_silence.wav', query: '?simbleed=0.08&simdelay=17.3', voice: false, timbre: 'dynamic' },
