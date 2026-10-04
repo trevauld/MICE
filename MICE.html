@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v11</div>
+  <div class="ver" id="ver">MICE v12</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -328,7 +328,38 @@ function startCue(t) {
 // eased curves. It never goes silent, so it stays a continuous sound to lock onto, and the first syllable starts at once.
 // After about 5.5 s of your speech (learn / tuneFor) it follows your voice: centre pitch and range, speed, phrase
 // length, the pitch and loudness shape of your phrases, and your own vowels.
-const NEUTRAL = [[600, 1250, 2500], [520, 1500, 2500], [450, 1050, 2450], [560, 1700, 2500], [400, 1350, 2400], [680, 1150, 2450]];
+// Vowels measured from real speakers: Hillenbrand, Getty, Clark & Wheeler (1995), 12 American English vowels from 45 men,
+// 48 women and 46 children (data hosted with permission at github.com/santiagobarreda/hillenbrand_et_al_1995, MIT licence).
+// The numbers below are the men's means (Hz) of F1, F2, F3 at 20% (on) and 80% (off) of the vowel, which is where each vowel's
+// own spectral glide comes from, and the mean duration d (ms). w is how often I let each vowel occur: reduced vowels (uh, ih, eh)
+// dominate, as in English running speech; the weights are my own estimates, not from that dataset.
+const VOWEL_DB = [
+  { n: 'uh', w: 0.26, d: 194, on: [622, 1181, 2548], off: [574, 1493, 2550] },
+  { n: 'ih', w: 0.16, d: 193, on: [434, 2032, 2683], off: [466, 1841, 2662] },
+  { n: 'eh', w: 0.09, d: 196, on: [584, 1817, 2603], off: [561, 1745, 2645] },
+  { n: 'er', w: 0.07, d: 263, on: [485, 1371, 1720], off: [442, 1484, 1752] },
+  { n: 'ae', w: 0.07, d: 272, on: [592, 1923, 2597], off: [632, 1720, 2598] },
+  { n: 'ah', w: 0.06, d: 261, on: [754, 1304, 2528], off: [706, 1461, 2537] },
+  { n: 'iy', w: 0.07, d: 244, on: [346, 2312, 3010], off: [343, 2317, 2947] },
+  { n: 'ei', w: 0.05, d: 267, on: [479, 2089, 2699], off: [400, 2229, 2742] },
+  { n: 'oa', w: 0.05, d: 266, on: [511, 936, 2455], off: [435, 898, 2448] },
+  { n: 'uw', w: 0.04, d: 237, on: [385, 1015, 2346], off: [368, 1028, 2338] },
+  { n: 'oo', w: 0.04, d: 193, on: [468, 1122, 2440], off: [483, 1490, 2445] },
+  { n: 'aw', w: 0.04, d: 275, on: [654, 1020, 2516], off: [658, 1265, 2492] },
+];
+// Across all 139 speakers, formants rise with pitch as (f0 / 130) ^ 0.31 / 0.33 / 0.27 for F1 / F2 / F3 (r = 0.82 to 0.87), because
+// higher voices have shorter vocal tracts. Relative to the men's means above.
+const FORM_EXP = [0.312, 0.327, 0.274];
+const VDB_MEAN = [0, 1, 2].map((k) => VOWEL_DB.reduce((a, v) => a + v.w * (v.on[k] + v.off[k]) / 2, 0));
+// Vocal-tract scale for F1..F3: from the user's pitch, nudged toward what was measured on the user's own speech (when known).
+function formantScale(center, meas) {
+  return [0, 1, 2].map((k) => {
+    const law = Math.pow(center / 130, FORM_EXP[k]);
+    const m = meas ? meas[k] / VDB_MEAN[k] : law;
+    return Math.max(0.85, Math.min(1.45, Math.sqrt(law * Math.max(0.7, Math.min(1.6, m)))));
+  });
+}
+const MUMBLE = 0.7;   // how far vowels keep their distinct shape (1 = full vowels, lower = more central and mumbled)
 // consonant-like gestures: formant targets (Hz, before scaling) for the first ~30 ms, how low the loudness dips,
 // and how far the top end closes (a nasal is dull).
 const GESTURES = [null, { f: [280, 1100, 2300], dip: 0.5, lp: 1200 }, { f: [350, 900, 2200], dip: 0.7, lp: 2600 }, { f: [450, 1500, 2600], dip: 0.38, lp: 2200 }];
@@ -343,11 +374,12 @@ const NOISY = [
 ];
 function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   const R = Math.random;
-  const tn = tune || { center: f0, spread: 2.5, rate: 4.5, phrase: 6, s1: 1, s2: 1 };
+  const tn = tune || { center: f0, spread: 2.5, rate: 4.5, phrase: 6 };
   const base = tn.center;
-  const sc = [tn.s1, tn.s2, tn.s2];
-  const VT = tn.vowels || NEUTRAL.map((v) => v.map((f, i) => f * sc[i]));
-  const VW = tn.vowelW || VT.map(() => 1);
+  const sc = tn.vscale || formantScale(base, null);
+  const mu = (k, x) => (VDB_MEAN[k] + MUMBLE * (x - VDB_MEAN[k])) * sc[k];     // pull toward the average vowel, then to this voice's size
+  const VT = VOWEL_DB.map((v) => ({ on: v.on.map((x, k) => mu(k, x)), off: v.off.map((x, k) => mu(k, x)), d: v.d }));
+  const VW = VOWEL_DB.map((v) => v.w), D0 = VOWEL_DB.reduce((a, v) => a + v.w * v.d, 0);
   const pitch = c.createConstantSource(); pitch.offset.setValueAtTime(base, t); srcs.push(pitch);
   const mk = (w, g) => { const o = c.createOscillator(); o.setPeriodicWave(w); o.frequency.value = 0; pitch.connect(o.frequency); srcs.push(o); const gg = c.createGain(); gg.gain.value = g; o.connect(gg); return gg; };
   const src = c.createGain(); mk(waves.mellow, 0.9).connect(src); mk(waves.bright, 0.22).connect(src);
@@ -373,7 +405,7 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   const fg = c.createGain(); fg.gain.setValueAtTime(0, t); fnz.connect(nb); nb.connect(nl); nl.connect(fg); fg.connect(amp);   // consonant noise joins after the low-pass
   const sibFc = Math.min(4200, tn.sibFc || 3800), pFric = tn.fric != null ? tn.fric : 0.2;
   const Q = [4, 5, 6], G = [1, 0.55, 0.25];
-  const fl = VT[0].map((f, i) => {
+  const fl = VT[0].on.map((f, i) => {
     const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.setValueAtTime(f, t); b.Q.value = Q[i];
     const g = c.createGain(); g.gain.value = G[i]; src.connect(b); b.connect(g); g.connect(am); return b;
   });
@@ -386,9 +418,10 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   };
   const shape = (arr, ph) => { const x = Math.max(0, Math.min(NB - 1, ph * NB - 0.5)), i = Math.floor(x), j = Math.min(NB - 1, i + 1); return arr[i] + (arr[j] - arr[i]) * (x - i); };
   const pickVowel = (cur) => { let tot = 0; VW.forEach((w, i) => { if (i !== cur) tot += w; }); let r = R() * tot; for (let i = 0; i < VW.length; i++) { if (i === cur) continue; r -= VW[i]; if (r <= 0) return i; } return (cur + 1) % VW.length; };
-  const st = { next: t, hz: base, f: VT[0].slice(), a: 1, lp: 3000, vowel: 0, i: 0, N: tn.phrase, rip: 0, first: true };
+  const st = { next: t, hz: base, f: VT[0].on.slice(), a: 1, lp: 3000, vowel: 0, i: 0, N: tn.phrase, rip: 0, first: true };
   const syllable = () => {
-    const ts = st.next, dur = (1 / tn.rate) * (0.85 + R() * 0.3);
+    const ts = st.next; let vd = 1;
+    let dur = (1 / tn.rate) * (0.85 + R() * 0.3);
     const last = st.i === st.N - 1, ph = (st.i + 0.5) / st.N;
     let semi = 0;
     if (!st.first) {
@@ -407,12 +440,16 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
     }
     if (!st.first) {
       st.vowel = (R() < 0.65) ? pickVowel(st.vowel) : st.vowel;
+      vd = VT[st.vowel].d / D0;                                   // /ae/ and /ah/ run long, /ih/ and /uh/ short
       const gd = g ? (g.dur ? g.dur + g.closure : 0.03) : 0;
+      dur *= 0.5 + 0.5 * vd;
       fl.forEach((b, i) => {
-        const to = VT[st.vowel][i] * (1 + (R() - 0.5) * 0.08);
+        const j = 1 + (R() - 0.5) * 0.06, on = VT[st.vowel].on[i] * j, off = VT[st.vowel].off[i] * j;
         let from = st.f[i];
         if (g) { const gf = g.f[i] * sc[i]; glide(b.frequency, from, gf, ts, gd); from = gf; }
-        glide(b.frequency, from, to, ts + gd, Math.max(0.04, dur * 0.85 - gd)); st.f[i] = to;
+        const room = Math.max(0.06, dur * 0.85 - gd);
+        glide(b.frequency, from, on, ts + gd, room * 0.35);                    // settle onto the vowel...
+        glide(b.frequency, on, off, ts + gd + room * 0.35, room * 0.65); st.f[i] = off;   // ...then take its own glide
       });
     }
     // loudness: dip for the gesture, swell to this syllable's level (from the learned phrase shape if known), ease off
@@ -787,22 +824,6 @@ function learn(cap, db, f0, end, floor) {   // floor: the room level in dB
     }
   }
 }
-// Five vowel targets from the user's own formants: k-means on (F1, F2), pulled 35% toward their average so they stay
-// central and mumbled, with weights by how often each is used.
-function vowelsFrom(fa) {
-  if (fa.length < 80) return null;
-  const mean = [0, 1, 2].map((i) => fa.reduce((a, r) => a + r[i], 0) / fa.length);
-  const byF2 = fa.slice().sort((x, y) => x[1] - y[1]);
-  let C = [0.1, 0.3, 0.5, 0.7, 0.9].map((q) => byF2[Math.floor(q * (byF2.length - 1))].slice());
-  let lab = new Array(fa.length).fill(0);
-  for (let it = 0; it < 10; it++) {
-    fa.forEach((r, n) => { let bd = 1e18; C.forEach((c, k) => { const d = ((r[0] - c[0]) / 150) ** 2 + ((r[1] - c[1]) / 400) ** 2; if (d < bd) { bd = d; lab[n] = k; } }); });
-    C = C.map((c, k) => { const m = fa.filter((_, n) => lab[n] === k); return m.length ? [0, 1, 2].map((i) => m.reduce((a, r) => a + r[i], 0) / m.length) : c; });
-  }
-  const out = [];
-  C.forEach((c, k) => { const w = lab.filter((l) => l === k).length / fa.length; if (w >= 0.06) out.push({ f: [0, 1, 2].map((i) => mean[i] + 0.65 * (c[i] - mean[i])), w }); });
-  return out.length >= 3 ? out : null;
-}
 function tuneFor() {
   const cap = capture, P = cap && cap.prof;
   if (!profReady(P)) return null;
@@ -813,14 +834,13 @@ function tuneFor() {
   const rate = P.syl >= 8 ? Math.max(2.5, Math.min(6.5, P.syl / P.sec)) : 4.5;   // too little loudness variation to count syllables: use a usual rate
   const seg = P.segN ? P.segSum / P.segN : 1.2;
   const phrase = Math.max(3, Math.min(10, Math.round(seg * rate)));
-  const sc = Math.max(0.9, Math.min(1.2, Math.pow(center / 130, 0.22)));          // fallback when no formants were measured: shorter tract for higher voices
-  const t = { center, spread, rate, phrase, s1: sc, s2: sc };
+  const t = { center, spread, rate, phrase };
+  if (P.fa.length >= 80) t.measF = [0, 1, 2].map((k) => P.fa.reduce((x, r) => x + r[k], 0) / P.fa.length);   // mean formants measured on the user's speech
+  t.vscale = formantScale(center, t.measF);
   if (P.fricEv >= 3) {                                                            // how often syllables carry frication, and where the hiss sits
     t.fric = Math.max(0.1, Math.min(0.6, P.fricEv / Math.max(1, P.sec * rate)));
     t.sibFc = Math.max(3000, Math.min(4800, (P.fzSum / Math.max(1, P.fz)) * cap.an.fs / 2));
   }
-  const v = vowelsFrom(P.fa);
-  if (v) { t.vowels = v.map((x) => x.f); t.vowelW = v.map((x) => x.w); }
   if (P.shN >= 3 && P.pCt.every((n) => n > 20)) {                                  // how pitch and loudness run over one phrase
     t.pitchShape = Array.from(P.pSh, (x, i) => x / P.pCt[i]);
     t.ampShape = Array.from(P.aSh, (x, i) => x / P.aCt[i]);

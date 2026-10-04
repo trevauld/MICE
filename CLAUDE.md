@@ -36,12 +36,18 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   breath noise through three formant filters; phrases of syllables, each starting with a consonant-like gesture
   then a central vowel, all on eased glides. Gestures are either formant dips (`GESTURES`: nasal, glide, soft stop) or real
   consonant noise (`NOISY`: s, sh, f, z, t) from a band of noise that bypasses the vowel filters, so there is sibilance. It schedules ahead with a timer that `stopCue` clears.
-- **Learning (`newProfile`, `learn`, `tuneFor`, `vowelsFrom`):** after about 5.5 s of detected speech it uses the user's
-  median pitch and range, how often syllables carry frication and where the hiss sits (zero-crossing rate of loud unpitched
-  frames inside speech), syllable rate (loudness peaks), phrase length and measured vowels (LPC formants, k-means to 5
-  targets pulled 35% toward the average). After a few finished phrases it also uses the user's pitch shape and loudness
-  shape over a phrase. Until then it uses the chosen note and defaults. The profile lives on the capture (it is lost when
-  listening stops) and a failure in `learn` switches learning off without touching detection.
+- **Vowels in SDV (`VOWEL_DB`, `formantScale`):** the vowels are real measurements, not invented: Hillenbrand et al. (1995), 12 American
+  English vowels from 139 speakers (data: github.com/santiagobarreda/hillenbrand_et_al_1995, MIT licence). Stored are the men's mean
+  F1–F3 at 20% and 80% of each vowel (so each vowel has its own glide) and mean duration (so /ae/ is longer than /ih/). The weights `w`
+  (reduced vowels most often) are my own estimate. Formants are scaled to the voice by the fitted law (f0/130)^(0.31, 0.33, 0.27)
+  (r 0.82–0.87 over the 139 speakers), nudged toward the formants measured on the user. `MUMBLE` pulls vowels toward the average vowel.
+- **Learning (`newProfile`, `learn`, `tuneFor`):** after about 5.5 s of detected speech SDV uses the user's median pitch and range, how often
+  syllables carry frication and where the hiss sits (zero-crossing rate of loud unpitched frames inside speech), syllable rate (loudness
+  peaks), phrase length and mean measured formants (LPC) for the vowel scale. After a few finished phrases it also uses the user's pitch
+  shape and loudness shape over a phrase. Until then it uses the chosen note and defaults. The profile lives on the capture (it is lost
+  when listening stops) and a failure in `learn` switches learning off without touching detection.
+- **Not done yet:** consonants are still hand-tuned (soft, nothing above 4.8 kHz). Next: measure fricative levels, durations and spectra
+  from a small speech corpus slice (for example CMU Arctic) and replace the hand-tuned `NOISY` values.
 - **Other:** "Match my voice" sets the note to the median speaking pitch. `draw` renders the 8 s timeline. `window.__mice` is the debug hook.
 
 ## UI
