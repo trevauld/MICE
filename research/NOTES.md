@@ -16,7 +16,7 @@ The data files are not in this repository; download them to a scratch folder to 
   - 62% "s"-like (spectral centre of gravity 6.3 kHz, median 80 ms, 20 ms fade-in, 7.4 dB below the median vowel level)
   - 38% "sh"-like (4.5 kHz, 70 ms, 10 ms fade-in, 9.1 dB below)
 - Limits: one voice; events include some bursts and "h"; no separate f, th, z or t numbers. Those levels in `NOISY` are my estimates.
-- Real sibilants this bright and loud sounded harsh on a headset, so `SIB_SOFT_DB` (-8 dB) and a 4.8 kHz cap on the hiss centre are deliberate departures from the data.
+- Real sibilants this bright and loud sounded harsh on a headset, so `SIB_SOFT_DB` (now -16 dB) and a 4.8 kHz cap on the hiss centre are deliberate departures from the data.
 
 ## Consonants: Jongman, Wayland and Wong (2000), JASA 108(3), 1252-1263
 Read from the full paper (not stored in this repository because it is copyrighted). Word-initial fricatives in citation words, 20 speakers (10 female, 10 male).

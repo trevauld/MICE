@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v14</div>
+  <div class="ver" id="ver">MICE v15</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -372,7 +372,7 @@ const GESTURES = [null, { f: [280, 1100, 2300], dip: 0.5, lp: 1200 }, { f: [350,
 //    fade-in, -9.1 dB).
 // Real sibilants that bright and loud sounded like a thin whistle on a headset, so SIB_SOFT_DB makes them quieter and the centre is kept
 // below 4.8 kHz. rel = level against the vowels (dB) before softening; t (a burst) is my estimate. lvl is derived from rel (see below).
-const SIB_SOFT_DB = -8;
+const SIB_SOFT_DB = -16;
 const NOISY = [
   { name: 's',  fcr: 1.0,  Q: 0.7, rel: -10,   dur: 0.08,  rise: 0.02,  closure: 0,    f: [320, 1400, 2500], dip: 0.45, lp: 3000, w: 5 },
   { name: 'z',  fcr: 0.95, Q: 0.7, rel: -9,    dur: 0.055, rise: 0.02,  closure: 0,    f: [300, 1300, 2500], dip: 0.7, lp: 3000, w: 3 },
