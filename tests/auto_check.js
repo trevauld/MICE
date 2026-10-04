@@ -1,6 +1,7 @@
 // The experimental auto cue: starts the cue when speech starts, never on noise, and the meter records the real delay.
 //   voice with bursts at known times: one start per burst, measured delay small, no false starts, nothing when switched off
 //   no voice (quiet room, rising hiss, hum, cue leaking into a silent room): no starts at all
+//   a room that gets 20 dB noisier after start-up, with rustles: no starts without voice, one start per burst with voice
 //   loud sounds that are not voice (a clap, a thump): the cue may start but must be dropped again and counted as a false start
 const { chromium } = require('playwright');
 const path = require('path');
@@ -32,12 +33,17 @@ async function run(wav, query, auto, resetMid) {
   res.hiss = await run('test_noise_rise.wav', '', true, false);
   res.hum = await run('test_hum.wav', '', true, false);
   res.slam = await run('test_slam.wav', '', true, false);
+  res.rustle = await run('test_rustle.wav', '', true, false);
+  res.noisyVoice = await run('test_noisy_voice.wav', '', true, false);
   for (const [k, v] of Object.entries(res)) console.log(k.padEnd(10), JSON.stringify({ at: v.at, starts: v.starts, n: v.n, mean: v.mean, min: v.min, max: v.max, falseStarts: v.falseStarts, errs: v.errs }));
   console.log(res.voice.text); console.log(res.voice.hear);
   const v = res.voice, vb = res.voiceBleed;
+  const nv = res.noisyVoice, ru = res.rustle;
+  console.log('noisy room: rustle only starts', ru.starts, '| with voice starts', nv.starts, 'false', nv.falseStarts, 'at', JSON.stringify(nv.at));
   const sl = res.slam;      // a clap and a thump may start the cue (nothing can tell yet), but both must be dropped as false starts
   console.log('slam: starts', sl.starts, 'false starts', sl.falseStarts);
-  const ok = sl.falseStarts === sl.starts && sl.n === 0 && v.starts === 6 && v.n >= 5 && v.mean < 80 && v.falseStarts === 0 && v.shown && v.afterReset.n === 0 && v.afterReset.starts === 0
+  const noisyOk = ru.starts === 0 && nv.starts === 6 && nv.n >= 6 && nv.falseStarts <= 1 && nv.at.every((x) => x < 11.8 || x > 13.4 ? true : false);
+  const ok = noisyOk && sl.falseStarts === sl.starts && sl.n === 0 && v.starts === 6 && v.n >= 5 && v.mean < 80 && v.falseStarts === 0 && v.shown && v.afterReset.n === 0 && v.afterReset.starts === 0
     && vb.starts === 6 && vb.n >= 5 && vb.falseStarts === 0
     && res.off.starts === 0 && res.silence.starts === 0 && res.hiss.starts === 0 && res.hum.starts === 0
     && Object.values(res).every((x) => !x.errs.length);

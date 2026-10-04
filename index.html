@@ -111,7 +111,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v20</div>
+  <div class="ver" id="ver">MICE v21</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -761,6 +761,22 @@ function makeAnalyzer(sr) {
       for (let i = 1; i <= n; i++) { const x = ring[(end - n + i) & MASK]; if ((x > 0) !== (prev > 0)) c++; prev = x; }
       return c / n;
     },
+    // Share of the energy (last 20 ms) that sits in the voice range (150 to 1100 Hz) against 1.6 to 6 kHz: close to 1 for a voiced start,
+    // about a half for broadband noise and rustle. Energy weighted, so a few ms of voice in a window of room noise still reads as voice.
+    lowFrac(end) {
+      const n = win;
+      if (end < n + 1) return 0;
+      const bins = [150, 250, 350, 500, 700, 900, 1100, 1600, 2200, 3000, 4000, 5000, 6000];
+      let lo = 0, hi = 0;
+      for (let q = 0; q < bins.length; q++) {
+        const w = 2 * Math.PI * bins[q] / fs, co = 2 * Math.cos(w);
+        let s1 = 0, s2 = 0;
+        for (let i = 0; i < n; i++) { const x = ring[(end - n + i) & MASK] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1))); const s0 = x + co * s1 - s2; s2 = s1; s1 = s0; }
+        const pw = s1 * s1 + s2 * s2 - co * s1 * s2;
+        if (q < 7) lo += pw; else hi += pw;
+      }
+      return lo / (lo + hi + 1e-30);
+    },
     pitch(end) {
       if (end < pwin) return 0;
       let mean = 0;
@@ -999,12 +1015,12 @@ async function listMics() {
 // follows: no clear pitch within 0.25 s (or a pitch far from yours) means a false start, and the cue is dropped. A meter keeps the real delay from your voice to the cue, measured in the recording itself.
 const AUTO_MAX = 8;          // never hold an automatic cue longer than this (s)
 const AUTO_COOLDOWN = 0.2;   // quiet time after an automatic cue before the next can start (s)
-function newMeter() { return { n: 0, sum: 0, min: Infinity, max: -Infinity, last: null, starts: 0, falseStarts: 0 }; }
+function newMeter() { return { n: 0, sum: 0, min: Infinity, max: -Infinity, last: null, starts: 0, falseStarts: 0, ignored: 0 }; }
 let meter = newMeter();
 const autoLog = [];   // frame times of automatic starts (for tests)
 function showMeter() {
   const m = meter, box = $('autoMeter');
-  box.hidden = !(S.auto || m.starts > 0);
+  box.hidden = !(S.auto || m.starts > 0 || m.ignored > 0);
   if (box.hidden) return;
   $('meterStart').textContent = m.n ? 'Start delay (your voice to the cue starting): ' + Math.round(m.sum / m.n) + ' ms on average over ' + m.n + (m.n === 1 ? ' start' : ' starts')
     + ' (last ' + Math.round(m.last) + ', range ' + Math.round(m.min) + ' to ' + Math.round(m.max) + ').' : 'Start delay (your voice to the cue starting): no measurements yet.';
@@ -1014,7 +1030,7 @@ function showMeter() {
   else if (m.n && rt != null) hear = 'The cue takes ' + Math.round(rt) + ' ms to get out through the headphones and back into the microphone; about half of that is output delay, so roughly ' + Math.round(m.sum / m.n + rt / 2) + ' ms until you hear it.';
   else if (m.n) hear = 'Output delay of the headphones is not known here, so it is not included.';
   $('meterHear').textContent = hear;
-  $('meterFalse').textContent = m.starts ? 'False starts: ' + m.falseStarts + ' of ' + m.starts + ' (the cue began but no voice followed).' : '';
+  $('meterFalse').textContent = (m.starts ? 'False starts: ' + m.falseStarts + ' of ' + m.starts + ' (the cue began but no voice followed). ' : '') + (m.ignored ? 'Ignored as noise before starting: ' + m.ignored + '.' : '');
 }
 function autoMeasure(cap) {                          // both times are in the recording's own clock, so this is the delay inside MICE
   const A = cap.auto;
@@ -1034,7 +1050,7 @@ function autoStart(cap, t) {
   showMeter();
 }
 function autoEnd(cap, t) {                           // the voice ended: let the cue go
-  if (cap.auto && cue && cue.auto) { release(); cap.auto = null; cap.autoEnd = t; }
+  if (cap.auto && cue && cue.auto) { release(); cap.auto = null; cap.autoEnd = capNow(cap); }
 }
 function autoFrame(cap, t, db, f0, end) {            // called for every frame while listening
   const V = cap.V, A = cap.auto;
@@ -1043,14 +1059,29 @@ function autoFrame(cap, t, db, f0, end) {            // called for every frame w
     const prof = tuneFor();
     if (!A.confirmed) {
       if (f0 > 0 && (!prof || Math.abs(12 * Math.log2(f0 / prof.center)) < 8)) A.pitched++;
-      if (A.pitched >= 2) A.confirmed = true;
-      else if (t - A.t > 0.25) { release(); meter.falseStarts++; cap.auto = null; cap.autoEnd = t; showMeter(); }   // no voice followed: drop the cue
+      if (A.pitched >= 2) { A.confirmed = true; cap.autoBack = AUTO_COOLDOWN; }
+      else if (t - A.t > 0.25) { release(); meter.falseStarts++; cap.auto = null; cap.autoEnd = t; cap.autoBack = Math.min(3, Math.max(0.6, (cap.autoBack || AUTO_COOLDOWN) * 2)); showMeter(); }   // no voice followed: drop the cue, and wait longer next time
     } else if ((V.state === 'quiet' && t - A.t > 0.5) || t - A.t > AUTO_MAX) { release(); cap.auto = null; cap.autoEnd = t; }
     return;
   }
-  if (!S.auto || cue || V.state !== 'quiet' || t - (cap.autoEnd || -1e9) < AUTO_COOLDOWN || cap.fc < 2) return;
-  const prev = cap.hist.db[(cap.fc - 1) % HN], th = V.floor + S.sens;
-  if (db <= th || prev > th) return;                                    // only the frame that first clears the threshold
+  // The recent noise level: the 30th percentile of the last 2 s of quiet frames. The start-up floor can be far too low once the room, a
+  // cord or the phone's microphone gain gets noisier; measured against it, every rustle looks like speech starting and, with the level
+  // always above it, a real start is never a crossing. So the trigger follows the recent level.
+  const NZ = 200, buf = cap.nzBuf || (cap.nzBuf = new Float32Array(NZ));
+  const quiet = V.state === 'quiet' && !cue;
+  let nz = V.floor;
+  if (cap.nzN >= 50) { const a = Array.from(buf.subarray(0, Math.min(cap.nzN, NZ))).sort((x, y) => x - y); nz = Math.max(V.floor, a[Math.floor(a.length * 0.3)]); }
+  const th = nz + S.sens;
+  const prev = cap.fc >= 1 ? cap.hist.db[(cap.fc - 1) % HN] : -1e9;
+  if (quiet) { buf[(cap.nzI = ((cap.nzI || 0) + 1) % NZ)] = db; cap.nzN = Math.min(NZ, (cap.nzN || 0) + 1); }
+  if (!S.auto || !quiet || cap.fc < 2) return;
+  const back = t - (cap.autoEnd || -1e9) > 10 ? AUTO_COOLDOWN : (cap.autoBack || AUTO_COOLDOWN);   // wait longer after false starts, forgetting after 10 quiet seconds
+  if (t - (cap.autoEnd || -1e9) < back) return;
+  if (db > th && prev <= th) cap.arm = 3;                              // the frame that first clears the recent noise level arms the trigger for 3 frames:
+  if (!(cap.arm > 0)) return;                                           // in noise the first frame is mostly noise, and the voice shows a frame or two later
+  if (db <= th) { cap.arm = 0; return; }
+  if (cap.an.lowFrac(end) < 0.8) { if (--cap.arm === 0) { meter.ignored++; showMeter(); } return; }   // broadband (rustle, hiss, breath), not a voiced start
+  cap.arm = 0;
   const P = cap.prof;
   if (P && profReady(P) && P.lvl != null && db < P.lvl - 14) return;   // far quieter than your own voice: someone else, or far away
   autoStart(cap, t);
@@ -1146,7 +1177,7 @@ function onFrame(cap, t, rawDb, cancDb, cueMs, end, held) {
       if (V.qrun >= 15) { V.state = 'quiet'; V.qrun = 0; voiceOff(cap, V.candEnd); }
     } else V.qrun = 0;
   }
-  if (session && session.cap === cap && (S.auto || cap.auto)) { try { autoFrame(cap, t, db, f0, end); } catch (err) { console.error('auto cue stopped:', err); S.auto = false; $('auto').checked = false; } }
+  if (session && session.cap === cap) { try { autoFrame(cap, t, db, f0, end); } catch (err) { console.error('auto cue stopped:', err); S.auto = false; $('auto').checked = false; } }
   if (V.state === 'voice' && cap.prof && !cap.prof.broken && learnOk(cap)) {
     try {                                    // learning is optional: it must never get in the way of voice detection
       learn(cap, db, f0, end, V.floor);

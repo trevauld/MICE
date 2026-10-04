@@ -44,6 +44,26 @@ i = int(6.0 * FS); x[i:i + int(0.12 * FS)] += rng.normal(0, 0.1, int(0.12 * FS))
 j = int(9.0 * FS); tt = np.arange(int(0.3 * FS)) / FS; x[j:j + len(tt)] += 0.2 * np.sin(2 * np.pi * 60 * tt) * np.exp(-tt * 12)
 save('test_slam.wav', x)
 
+# a room that gets noisier after the start-up measurement (4 s): 20 dB more noise that wobbles slowly, with short broadband rustles
+# (a cord, clothing, breath) every second or so, like a phone raising its microphone gain. test_rustle.wav has no voice;
+# test_noisy_voice.wav has the same six voice bursts as test_voice.wav on top.
+def noisy(with_voice):
+    r = np.random.default_rng(21)
+    x = r.normal(0, 0.002, n); t = np.arange(n) / FS
+    amb = r.normal(0, 1, n) * 0.016 * (1 + 0.5 * np.sin(2 * np.pi * 0.45 * t))
+    amb[t < 4.0] = 0
+    x += amb
+    tt = 4.4
+    while tt < 13.0:
+        L = int(r.uniform(0.02, 0.05) * FS); i = int(tt * FS)
+        x[i:i + L] += r.normal(0, 0.06, L) * np.hanning(L)
+        tt += r.uniform(0.7, 1.4)
+    if with_voice:
+        for o, Ln in zip(ONSETS, LENGTHS): burst(x, o, Ln, 140, 0.145)
+    return x
+save('test_rustle.wav', noisy(False))
+save('test_noisy_voice.wav', noisy(True))
+
 make('test_voice.wav', 13.5, 0, False)
 make('test_voice_talk.wav', 16.5, 3, True)
 print('made test_voice.wav and test_voice_talk.wav')
