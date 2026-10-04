@@ -105,12 +105,13 @@ details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary::after{content:"+";font-size:1.3rem;line-height:1;color:var(--muted)}
 details.fold[open]>summary::after{content:"\2212"}
 details.fold[open]>summary{margin-bottom:12px}
+.autoBox{display:grid;gap:8px}
 .ver{font-size:.74rem;letter-spacing:.06em;color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:-12px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v19</div>
+  <div class="ver" id="ver">MICE v20</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -142,6 +143,15 @@ details.fold[open]>summary{margin-bottom:12px}
         <p class="status" id="status" role="status" aria-live="polite"></p>
         <p class="small muted" id="bleedMsg" style="margin:0"></p>
         <p class="note" id="envNote" hidden></p>
+        <div class="autoBox">
+          <label class="check"><input type="checkbox" id="auto"> <span>Auto cue (experimental): start the cue when I start speaking</span></label>
+          <div id="autoMeter" class="small" hidden>
+            <p class="meterLine" id="meterStart" style="margin:0"></p>
+            <p class="meterLine muted" id="meterHear" style="margin:0"></p>
+            <p class="meterLine muted" id="meterFalse" style="margin:0"></p>
+            <div class="row"><button class="btn" id="meterReset" type="button">Reset meter</button></div>
+          </div>
+        </div>
         <label class="f">Microphone<select id="micSel"><option value="">Default microphone</option></select></label>
       </details>
 
@@ -202,6 +212,7 @@ const S = {
   volume: store.get('volume', 0.55),
   release: store.get('release', 120),
   muted: store.get('muted', false),
+  auto: false,                       // experimental and never remembered: it must not start on its own the next time the page opens
   hiss: store.get('hiss', true),
   learnMode: store.get('learnMode', 'hold'),
   hissDb: store.get('hissDb', -16),
@@ -256,6 +267,8 @@ $('rel').addEventListener('input', (e) => setSetting('release', +e.target.value)
 $('trigger').addEventListener('change', (e) => setSetting('trigger', e.target.value));
 $('learnMode').addEventListener('change', (e) => { setSetting('learnMode', e.target.value); e.target.blur(); });
 $('forgetBtn').addEventListener('click', (e) => { e.currentTarget.blur(); if (capture) { capture.prof = newProfile(); capture.accept = false; } showMatch(); });
+$('auto').addEventListener('change', (e) => { S.auto = e.target.checked; if (!S.auto && capture && capture.auto && cue && cue.auto) { release(); capture.auto = null; } showMeter(); setStatus(S.auto ? (session ? 'Auto cue is on: the cue starts when you start speaking. Holding the pad still works.' : 'Auto cue is on. Start listening to use it.') + (S.timbre === 'dynamic' && S.learnMode === 'hold' ? ' Note: an automatic cue does not count as holding it, so the Dynamic voice learns only from speech while you hold the pad (or choose "All speech" under Cue sound).' : '') : (session ? 'Auto cue is off.' : '')); e.target.blur(); });
+$('meterReset').addEventListener('click', (e) => { e.currentTarget.blur(); meter = newMeter(); showMeter(); });
 $('hiss').addEventListener('change', (e) => setSetting('hiss', e.target.checked));
 $('hissDb').addEventListener('input', (e) => setSetting('hissDb', +e.target.value));
 $('mute').addEventListener('change', (e) => setSetting('muted', e.target.checked));
@@ -544,7 +557,7 @@ const held = new Set();
 const livePresses = []; // context times, for the timeline
 function press() {
   audio();
-  if (cue) return;
+  if (cue) { if (cue.auto) { cue.auto = false; if (capture) capture.auto = null; } return; }   // a manual press takes over an automatic cue
   const t = ctx.currentTime;
   cue = startCue(t);
   gate(t, 1);
@@ -817,7 +830,7 @@ function quantile(arr, q) { if (!arr.length) return null; const a = Float64Array
 // detected speech and keeps refining while you talk.
 const NB = 8; // bins across a phrase
 function newProfile() {
-  return { sec: 0, f: [], fn: 0, syl: 0, segN: 0, segSum: 0, valley: 0, lastPk: 0, s0: null, s1: null, s2: null, lastFc: -9,
+  return { lvl: null, sec: 0, f: [], fn: 0, syl: 0, segN: 0, segSum: 0, valley: 0, lastPk: 0, s0: null, s1: null, s2: null, lastFc: -9,
     fa: [], fan: 0, fm: [0, 0, 0], fr: 0, fz: 0, fzSum: 0, fricEv: 0, cur: null, shN: 0, pSh: new Float64Array(NB), pCt: new Float64Array(NB), aSh: new Float64Array(NB), aCt: new Float64Array(NB), cache: null };
 }
 function profReady(P) { return !!P && P.sec >= 5.5 && P.fn >= 200; }
@@ -853,6 +866,7 @@ function learn(cap, db, f0, end, floor) {   // floor: the room level in dB
   } else { if (P.fr >= 4) P.fricEv++; P.fr = 0; }
   if (f0 > 0) {
     if (P.f.length < 3000) P.f.push(f0); else P.f[P.fn % 3000] = f0;
+    P.lvl = P.lvl == null ? db : P.lvl * 0.98 + db * 0.02;      // typical level of your voice, for the auto cue
     P.fn++;
     if (P.fn >= 100 && P.fn % 100 === 0) P.med = median(P.f);
     if (P.fn % 2 === 0 && db > floor + 10 && cap.an.formants(end, P.fm)) {
@@ -977,11 +991,76 @@ async function listMics() {
 }
 
 // Press, release and click times, read from the recorded marker channel (same clock as the voice).
+// ---------------- auto cue (experimental) ----------------
+// Starts the cue when speech starts, and stops it when the speech ends. It can only react after the voice has begun, so the cue
+// always arrives a little late. The trigger is a fast level crossing on the first 10 ms frame that clears the noise floor (that is
+// the quickest the analysis can tell) and, once your voice is known, a level close to your own. That first frame is mostly room
+// noise with a few milliseconds of voice, so nothing finer (zero-crossing rate, pitch) can be judged yet. A quick pitch check
+// follows: no clear pitch within 0.25 s (or a pitch far from yours) means a false start, and the cue is dropped. A meter keeps the real delay from your voice to the cue, measured in the recording itself.
+const AUTO_MAX = 8;          // never hold an automatic cue longer than this (s)
+const AUTO_COOLDOWN = 0.2;   // quiet time after an automatic cue before the next can start (s)
+function newMeter() { return { n: 0, sum: 0, min: Infinity, max: -Infinity, last: null, starts: 0, falseStarts: 0 }; }
+let meter = newMeter();
+const autoLog = [];   // frame times of automatic starts (for tests)
+function showMeter() {
+  const m = meter, box = $('autoMeter');
+  box.hidden = !(S.auto || m.starts > 0);
+  if (box.hidden) return;
+  $('meterStart').textContent = m.n ? 'Start delay (your voice to the cue starting): ' + Math.round(m.sum / m.n) + ' ms on average over ' + m.n + (m.n === 1 ? ' start' : ' starts')
+    + ' (last ' + Math.round(m.last) + ', range ' + Math.round(m.min) + ' to ' + Math.round(m.max) + ').' : 'Start delay (your voice to the cue starting): no measurements yet.';
+  const lat = ctx ? (ctx.outputLatency || 0) + (ctx.baseLatency || 0) : 0, rt = capture && capture.bleed && capture.bleed.delayMs != null ? capture.bleed.delayMs : null;
+  let hear = '';
+  if (m.n && lat > 0.001) hear = 'The browser reports ' + Math.round(lat * 1000) + ' ms of output delay on top, so about ' + Math.round(m.sum / m.n + lat * 1000) + ' ms until you hear it.';
+  else if (m.n && rt != null) hear = 'The cue takes ' + Math.round(rt) + ' ms to get out through the headphones and back into the microphone; about half of that is output delay, so roughly ' + Math.round(m.sum / m.n + rt / 2) + ' ms until you hear it.';
+  else if (m.n) hear = 'Output delay of the headphones is not known here, so it is not included.';
+  $('meterHear').textContent = hear;
+  $('meterFalse').textContent = m.starts ? 'False starts: ' + m.falseStarts + ' of ' + m.starts + ' (the cue began but no voice followed).' : '';
+}
+function autoMeasure(cap) {                          // both times are in the recording's own clock, so this is the delay inside MICE
+  const A = cap.auto;
+  if (!A || A.counted || A.marker == null || A.on == null) return;
+  A.counted = true;
+  const ms = (A.marker - A.on) * 1000;
+  if (ms < -60 || ms > 500) return;                  // not this start's voice
+  meter.n++; meter.sum += ms; meter.last = ms; meter.min = Math.min(meter.min, ms); meter.max = Math.max(meter.max, ms);
+  showMeter();
+}
+function autoStart(cap, t) {
+  press();
+  if (!cue) return;
+  cue.auto = true;
+  cap.auto = { t, pitched: 0, confirmed: false, marker: null, on: null, counted: false };
+  meter.starts++; autoLog.push(t); if (autoLog.length > 100) autoLog.shift();
+  showMeter();
+}
+function autoEnd(cap, t) {                           // the voice ended: let the cue go
+  if (cap.auto && cue && cue.auto) { release(); cap.auto = null; cap.autoEnd = t; }
+}
+function autoFrame(cap, t, db, f0, end) {            // called for every frame while listening
+  const V = cap.V, A = cap.auto;
+  if (A) {
+    if (!cue || !cue.auto) { cap.auto = null; return; }                 // taken over by a manual press, or gone
+    const prof = tuneFor();
+    if (!A.confirmed) {
+      if (f0 > 0 && (!prof || Math.abs(12 * Math.log2(f0 / prof.center)) < 8)) A.pitched++;
+      if (A.pitched >= 2) A.confirmed = true;
+      else if (t - A.t > 0.25) { release(); meter.falseStarts++; cap.auto = null; cap.autoEnd = t; showMeter(); }   // no voice followed: drop the cue
+    } else if ((V.state === 'quiet' && t - A.t > 0.5) || t - A.t > AUTO_MAX) { release(); cap.auto = null; cap.autoEnd = t; }
+    return;
+  }
+  if (!S.auto || cue || V.state !== 'quiet' || t - (cap.autoEnd || -1e9) < AUTO_COOLDOWN || cap.fc < 2) return;
+  const prev = cap.hist.db[(cap.fc - 1) % HN], th = V.floor + S.sens;
+  if (db <= th || prev > th) return;                                    // only the frame that first clears the threshold
+  const P = cap.prof;
+  if (P && profReady(P) && P.lvl != null && db < P.lvl - 14) return;   // far quieter than your own voice: someone else, or far away
+  autoStart(cap, t);
+}
 // Was the cue held around the time a voice started? Learning only from speech like that keeps other sounds (a call, a voice assistant
 // leaking into the microphone) from teaching the Dynamic voice. Held up to 0.8 s before the voice, or 0.2 s after, or still held.
 function pressNear(on) {
   for (let i = livePresses.length - 1; i >= 0; i--) {
     const p = livePresses[i];
+    if (p.auto) continue;                 // an automatic cue is not a sign that the speech is yours
     if (p.down > on + 0.2) continue;
     if (p.down >= on - 0.8) return true;
     if (p.up == null || p.up >= on) return true;
@@ -994,8 +1073,10 @@ function onMarker(cap, type, k) {
   const t = cap.an.timeOf(k);
   if (type === 'press') {
     cap.an.armGain(k, cap.V.state !== 'voice'); cap.gainFrom = t;
-    addLivePress({ down: t, up: null });
-    if (cap.V.state === 'voice') cap.accept = true;     // pressed while already speaking
+    const isAuto = !!(cap.auto && cap.auto.marker == null);
+    addLivePress({ down: t, up: null, auto: isAuto });
+    if (isAuto) { cap.auto.marker = t; autoMeasure(cap); }
+    else if (cap.V.state === 'voice') cap.accept = true;     // pressed while already speaking
   } else if (type === 'release') {
     for (let i = livePresses.length - 1; i >= 0; i--) { const p = livePresses[i]; if (!p.ctx && p.up == null) { p.up = t; break; } }
   } else cap.clicks.push(k);
@@ -1065,6 +1146,7 @@ function onFrame(cap, t, rawDb, cancDb, cueMs, end, held) {
       if (V.qrun >= 15) { V.state = 'quiet'; V.qrun = 0; voiceOff(cap, V.candEnd); }
     } else V.qrun = 0;
   }
+  if (session && session.cap === cap && (S.auto || cap.auto)) { try { autoFrame(cap, t, db, f0, end); } catch (err) { console.error('auto cue stopped:', err); S.auto = false; $('auto').checked = false; } }
   if (V.state === 'voice' && cap.prof && !cap.prof.broken && learnOk(cap)) {
     try {                                    // learning is optional: it must never get in the way of voice detection
       learn(cap, db, f0, end, V.floor);
@@ -1107,6 +1189,7 @@ function voiceOn(cap, on) {
   on = refineOnset(cap, on);
   cap.segOpen = on;
   cap.accept = pressNear(on);
+  if (cap.auto && cap.auto.on == null) { cap.auto.on = on; autoMeasure(cap); }
   fixHist(cap, on, 1);
 }
 function voiceOff(cap, off) {
@@ -1118,6 +1201,7 @@ function voiceOff(cap, off) {
   }
   fixHist(cap, off, 0);
   cap.lastOff = off;
+  autoEnd(cap, off);
   if (cap.prof) { cap.prof.segN++; cap.prof.segSum += off - on; }
   liveSegs.push({ on, off }); if (liveSegs.length > 200) liveSegs.shift();
 }
@@ -1482,7 +1566,7 @@ requestAnimationFrame(draw);
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) problems.push('This browser cannot use the microphone from this file. Open it in Chrome or Edge, over https or from disk.');
   if (problems.length) { $('envNote').hidden = false; $('envNote').textContent = problems.join(' '); }
 })();
-window.__mice = { get tune() { return tuneFor(); }, get prof() { return capture && capture.prof; }, get capture() { return capture; }, get segs() { return liveSegs; } };
+window.__mice = { get meter() { return meter; }, get autoLog() { return autoLog; }, get tune() { return tuneFor(); }, get prof() { return capture && capture.prof; }, get capture() { return capture; }, get segs() { return liveSegs; } };
 
 // Collapsible panels: remembered per panel; closed by default on narrow screens so the pad stays in front.
 ['sesFold', 'cueFold'].forEach((id) => {

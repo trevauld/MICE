@@ -15,6 +15,7 @@ const path = require('path');
   res.userSelect = await p.evaluate(() => getComputedStyle(document.querySelector('#pad .big')).userSelect);
   res.bodySelect = await p.evaluate(() => [getComputedStyle(document.body).userSelect, getComputedStyle(document.getElementById('tlTitle')).userSelect]);
   res.learnModes = await p.evaluate(() => [...document.querySelectorAll('#learnMode option')].map((o) => o.value).join(','));
+  res.autoOff = await p.evaluate(() => !document.getElementById('auto').checked && document.getElementById('autoMeter').hidden);   // off by default and never remembered
   res.hissHidden = await p.evaluate(() => document.getElementById('sdvBox').hidden);   // hidden until Dynamic voice is chosen
   res.folds = await p.evaluate(() => [...document.querySelectorAll('details.fold')].map((d) => d.open));
   await p.click('#sesFold > summary'); res.afterClick = await p.evaluate(() => document.getElementById('sesFold').open);

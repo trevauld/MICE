@@ -38,6 +38,12 @@ save('test_noise_rise.wav', rng.normal(0, 1, n) * np.interp(np.arange(n) / FS, [
 t = np.arange(n) / FS
 save('test_hum.wav', 0.01 * np.sin(2 * np.pi * 55 * t) + 0.006 * np.sin(2 * np.pi * 110 * t) + rng.normal(0, 0.003, n))
 
+# loud sounds that are not voice: a noise burst (a clap) at 6 s and a 60 Hz thump (a door) at 9 s
+x = rng.normal(0, 0.002, n)
+i = int(6.0 * FS); x[i:i + int(0.12 * FS)] += rng.normal(0, 0.1, int(0.12 * FS)) * np.hanning(int(0.12 * FS))
+j = int(9.0 * FS); tt = np.arange(int(0.3 * FS)) / FS; x[j:j + len(tt)] += 0.2 * np.sin(2 * np.pi * 60 * tt) * np.exp(-tt * 12)
+save('test_slam.wav', x)
+
 make('test_voice.wav', 13.5, 0, False)
 make('test_voice_talk.wav', 16.5, 3, True)
 print('made test_voice.wav and test_voice_talk.wav')

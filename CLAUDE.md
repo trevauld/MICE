@@ -56,6 +56,15 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   durations and fade-ins from my CMU Arctic measurement; the two agree (see research/NOTES.md). Level and brightness are deliberately softer than
   the data (the Hiss checkbox and level slider in Cue sound, shown only for the Dynamic voice; default -16 dB; hiss centre capped at 4.8 kHz) because real sibilants sounded like a thin whistle on a headset. The burst "t" is an estimate.
   The paper's PDF is kept out of git and the deploy (`*.pdf` in .gitignore and .assetsignore).
+- **Auto cue (experimental, `autoFrame`, `autoStart`, `autoEnd`, `meter`):** off by default and never remembered. When on, the first 10 ms frame that clears the
+  noise floor by `S.sens` (and, once the voice profile is ready, is within 14 dB of the user's level) starts the cue through the normal `press()`; a manual press
+  takes over (`cue.auto = false`). Two frames with a clear pitch (within 8 semitones of the learned centre) confirm it; none within 0.25 s drops it and counts a
+  false start. The cue is released with the voice (`voiceOff`), after 0.5 s of nothing, or after 8 s. It can only react after the voice has begun, and a block
+  makes no sound, so it cannot help there. Zero-crossing rate was tried at the trigger and removed: that first frame is mostly room noise. Automatic presses do not
+  count as holds for learning (`p.auto`).
+  The meter records the start delay inside MICE: the cue's start (the gate marker, sample-accurate) minus the refined voice onset (`refineOnset`), both from the
+  recording, as a running mean with last, min, max and a reset. It adds the browser's reported output delay (`ctx.outputLatency + baseLatency`), or half the bleed
+  round trip, to estimate the time until the user hears the cue. Headless Chromium: about 15 ms start delay, 9 to 19 ms. `tests/auto_check.js`.
 - **Screen awake (`keepAwake`):** a screen wake lock is held while listening (a locked phone stops the microphone) and re-requested when the page becomes visible again; if the browser has none, the status line says to set Auto-Lock to Never. Installed iOS web apps only got wake lock support in iOS 18.4; older versions need Auto-Lock off.
 - **Other:** "Match my voice" sets the note to the median speaking pitch. `draw` renders the 8 s timeline. `window.__mice` is the debug hook.
 
