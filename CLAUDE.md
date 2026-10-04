@@ -3,7 +3,7 @@
 index.html is a single-page PWA for stuttering practice. The user holds a pad or key just before voicing, and a
 soft sustained tone (the "cue") plays while it is held: a manual version of the choral effect, an outside sound to
 lock onto. While listening, MICE also detects the user's voice so that the "Dynamic voice" cue can learn from it
-and become more like the user's own voice as a session goes on. The long-term goal is to start the cue automatically.
+and become more like the user's own voice as a session goes on. Starting the cue automatically was tried and dropped (see the Auto cue note below).
 
 Deliberately small. It does two things: play the cue on a press, and listen to learn the voice. It does not save
 anything (no files, no zip, no recordings) and does no timing statistics. The last version that did is tagged `v8-full`.
@@ -18,8 +18,8 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   apply gain: see voice detection). Keep them off.
 
 ## Map of the script
-- **Settings:** `S` is persisted in localStorage under `mice.*`. Also `TIMBRES` and notes E2–A4 (MIDI 40–69).
-- **Audio engine:** `startCue`/`stopCue` → `cueBus` → `out` (volume and mute) → speakers.
+- **Settings:** `S` is persisted in localStorage under `mice.*` (sound, note, volume, hold key, hiss, learning). Also `TIMBRES` and notes E2–A4 (MIDI 40–69).
+- **Audio engine:** `startCue`/`stopCue` → `cueBus` → `out` (volume) → speakers.
   `gateSrc` (ConstantSource) → `markBus` is a timing gate: 1 while the cue is held. Recorded by the capture, never played.
 - **Sounds:** soft piano, electric piano, warm organ, hum, and Dynamic voice (see below).
 - **Capture:** `openCapture` feeds one worklet with 3 inputs: the mic, `out` (the cue as heard) and the gate, in one sample stream.
@@ -43,9 +43,8 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   F1–F3 at 20% and 80% of each vowel (so each vowel has its own glide) and mean duration (so /ae/ is longer than /ih/). The weights `w`
   (reduced vowels most often) are my own estimate. Formants are scaled to the voice by the fitted law (f0/130)^(0.31, 0.33, 0.27)
   (r 0.82–0.87 over the 139 speakers), nudged toward the formants measured on the user. `MUMBLE` pulls vowels toward the average vowel.
-- **Whose voice (`pressNear`, `learnOk`):** a voice assistant or call leaking into the microphone must not teach SDV (it once learned Claude's voice). By default
-  learning only counts speech where the cue was held (up to 0.8 s before the voice starts, 0.2 s after, or still held). The setting "Learn my voice from" can
-  also allow all speech, or freeze learning; "Forget what it learned" resets it. As a second guard `learn` skips frames more than 8 semitones from the pitch
+- **Whose voice (`pressNear`, `learnOk`):** a voice assistant or call leaking into the microphone must not teach SDV (it once learned Claude's voice). Learning only counts speech where the cue
+  was held (up to 0.8 s before the voice starts, 0.2 s after, or still held); the "Learn my voice while I hold the cue" checkbox switches it off; "Forget what it learned" resets it. As a second guard `learn` skips frames more than 8 semitones from the pitch
   learned so far. Test: `tests/leak_check.js`.
 - **Learning (`newProfile`, `learn`, `tuneFor`):** after about 5.5 s of detected speech SDV uses the user's median pitch and range, how often
   syllables carry frication and where the hiss sits (zero-crossing rate of loud unpitched frames inside speech), syllable rate (loudness
@@ -56,32 +55,22 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   durations and fade-ins from my CMU Arctic measurement; the two agree (see research/NOTES.md). Level and brightness are deliberately softer than
   the data (the Hiss checkbox and level slider in Cue sound, shown only for the Dynamic voice; default -16 dB; hiss centre capped at 4.8 kHz) because real sibilants sounded like a thin whistle on a headset. The burst "t" is an estimate.
   The paper's PDF is kept out of git and the deploy (`*.pdf` in .gitignore and .assetsignore).
-- **Auto cue (experimental, `calStart`/`calFrame`/`calFinish`, `autoFrame`, `autoStart`, `autoEnd`, `meter`):** off by default and never remembered. Ticking it (while listening, or at the next
-  start) first runs a setup, because a guessed "how much louder than the room is speech" failed on a real phone (21 of 50 starts false, real speech missed): (1) 4 s of the room (median, 99th
-  percentile), (2) about 2 s of voiced speech (level, pitch range, Wiener entropy, voice-range share). The setup refuses if the quietest speech is less than 6 dB above the loudest room
-  noise, with advice. The margin `M` sits between the room's own peaks and the quietest speech; the pitch range, a ceiling (a clap) and the entropy / voice-range limits come from the user's
-  voice. Everything is measured against the recent noise level (30th percentile of the last 2 s of quiet frames), so a change in phone gain does not break it. Nothing starts until the setup is
-  ready. A frame that clears `nz + M` only arms the trigger; in the next frames (still over the line) two of three votes (voice-range energy, peaked spectrum, a pitch inside the user's range)
-  start the cue through the normal `press()`. A manual press takes over (`cue.auto = false`). Two frames with a pitch in range confirm; none within 0.25 s drops it, counts a false start,
-  keeps the evidence (`meter.lastFalse`, shown in the meter) and doubles the wait before the next start (0.6 s up to 3 s, forgotten after 10 quiet seconds). The cue is released with the voice
-  (`voiceOff`), after 0.5 s of nothing, or after 8 s. Lessons: the first version compared with the start-up floor and fired on every rustle in a noisier room; zero-crossing rate is wrong at the
-  trigger (the first frame is mostly room noise). It cannot react to unvoiced starts (s, f) and, because it can only react after the voice has begun, never to a block. Automatic presses
-  do not count as holds for learning (`p.auto`). Test audio: `cal_*.wav` (quiet while starting, room measured, speech from 11 s, test content from 22 s).
-  `refineOnset` (the voice-onset reference for the meter and for the blue lines) follows Chronset (Roux et al. 2017): from the confirmed voice it walks back along the recording to where the
-  loudness first rose clear of the noise, up to 150 ms and never into the previous speech, bridging dips under 15 ms. "Clear of the noise" is 6 dB over the quiet frames just before (not the
-  start-up floor), and it looks forward as well as back because the frame candidate can be early in noise. Against known truth (`tests/onset_check.js`, located with a sync pulse): clean 0 ms,
-  noisy room +3 to +4 ms (one -9), hiss-first onsets 0 to 2 ms; the previous version was 31 ms early in noise and 59 ms late on hiss-first onsets. Real speech is messier: Chronset itself
-  agrees with human raters only to within 10 to 50 ms.
-  The meter records the start delay inside MICE: the cue's start (the gate marker, sample-accurate) minus the refined voice onset (`refineOnset`), both from the
-  recording, as a running mean with last, min, max, false starts, ignored and a reset. It adds the browser's reported output delay (`ctx.outputLatency + baseLatency`),
-  or half the bleed round trip, to estimate the time until the user hears the cue. In a noisy room `refineOnset` has less to go on, so the meter errs on the long side.
-  Headless Chromium: about 25 ms start delay (20 to 29) in a quiet room (the two-frame sustain adds 10 ms), 30 ms with 20 dB more noise. `tests/auto_check.js`.
+- **Auto cue: removed (tag `v23-auto`).** It tried to start the cue when speech started (with a room-and-voice setup and a latency meter). It could not be made reliable on a real phone
+  (false starts in rustle and noise, missed real starts), and a voice-onset trigger can only react after the voice has begun, never to a block. Not planned.
+- **Voice onset (`refineOnset`)** follows Chronset (Roux et al. 2017): from the confirmed voice it walks back along the recording to where the loudness first rose clear of the noise, up to 150 ms
+  and never into the previous speech, bridging dips under 15 ms. "Clear of the noise" is 6 dB over the quiet frames just before (not the start-up floor), and it looks forward as well as
+  back because the frame candidate can be early in noise. It sets where the blue voice bars start. Against known truth (`tests/onset_check.js`, located with a sync pulse): clean 0 ms,
+  noisy room +3 to +4 ms, hiss-first onsets 0 to 2 ms (the previous version was 31 ms early in noise and 59 ms late on hiss-first onsets). Real speech is messier: Chronset itself agrees with
+  human raters only to within 10 to 50 ms.
 - **Screen awake (`keepAwake`):** a screen wake lock is held while listening (a locked phone stops the microphone) and re-requested when the page becomes visible again; if the browser has none, the status line says to set Auto-Lock to Never. Installed iOS web apps only got wake lock support in iOS 18.4; older versions need Auto-Lock off.
-- **Other:** "Match my voice" sets the note to the median speaking pitch. `draw` renders the 8 s timeline. `window.__mice` is the debug hook.
+- **Other:** `draw` renders the 8 s timeline. `window.__mice` is the debug hook.
 
 ## UI
-- The version label "MICE vN" is at the top. Bump it with `VERSION` in sw.js on every release (ui_check.js fails if they differ).
-- Pad first; on touch screens it is 80% of the page height. All page text is non-selectable. Session and Cue sound panels collapse (state remembered).
+- One screen: the version label "MICE vN" (bump it with `VERSION` in sw.js on every release; ui_check.js fails if they differ), the Hold pad (80% of the page height on touch screens), a
+  "Listening" panel (8 s graph, Start/Stop listening, status line, a warning line only when something is wrong), and one collapsible "Cue sound" panel (Sound, Note, Volume, Hold key; for the
+  Dynamic voice also: learning status, "Learn my voice while I hold the cue", the hiss checkbox and level, "Forget what it learned").
+- Deliberately not there: saving, statistics, a microphone chooser (the system default is used), mute, fade length (fixed 120 ms), a "Match my voice" button, the cue bleed report (only warnings are shown),
+  and any automatic cue. All page text is non-selectable.
 - Hold key: Space, Left Ctrl, Left Shift or any key.
 
 ## PWA

@@ -8,17 +8,17 @@ const path = require('path');
   let p = await b.newPage({ viewport: { width: 1280, height: 800 } });
   const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
   await p.goto(url);
-  res.removed = await p.evaluate(() => ['cond', 'notes', 'howTitle', 'sLead', 'save', 'rec', 'delayBtn', 'folderBtn'].every((id) => !document.getElementById(id)) && !document.querySelector('h1,.lede'));
+  res.removed = await p.evaluate(() => ['cond', 'notes', 'howTitle', 'sLead', 'save', 'rec', 'delayBtn', 'folderBtn', 'auto', 'autoMeter', 'learnMode', 'mute', 'rel', 'micSel', 'matchBtn', 'bleedMsg', 'sesFold'].every((id) => !document.getElementById(id)) && !document.querySelector('h1,.lede'));
   const sw = require('fs').readFileSync(path.resolve(path.dirname(url.replace('file://', '')), 'sw.js'), 'utf8').match(/mice-v(\d+)/)[1];
   res.version = await p.evaluate((n) => document.getElementById('ver').textContent === 'MICE v' + n, sw);
   res.padFirst = await p.evaluate(() => document.querySelector('.wrap').children[1].querySelector('#pad') !== null);
   res.userSelect = await p.evaluate(() => getComputedStyle(document.querySelector('#pad .big')).userSelect);
   res.bodySelect = await p.evaluate(() => [getComputedStyle(document.body).userSelect, getComputedStyle(document.getElementById('tlTitle')).userSelect]);
-  res.learnModes = await p.evaluate(() => [...document.querySelectorAll('#learnMode option')].map((o) => o.value).join(','));
-  res.autoOff = await p.evaluate(() => !document.getElementById('auto').checked && document.getElementById('autoMeter').hidden);   // off by default and never remembered
+  res.learnOn = await p.evaluate(() => document.getElementById('learn').checked);   // learning from held-cue speech is on by default
   res.hissHidden = await p.evaluate(() => document.getElementById('sdvBox').hidden);   // hidden until Dynamic voice is chosen
   res.folds = await p.evaluate(() => [...document.querySelectorAll('details.fold')].map((d) => d.open));
-  await p.click('#sesFold > summary'); res.afterClick = await p.evaluate(() => document.getElementById('sesFold').open);
+  await p.click('#cueFold > summary'); res.afterClick = await p.evaluate(() => document.getElementById('cueFold').open);
+  await p.click('#cueFold > summary');                      // open it again for the checks below
   res.options = await p.evaluate(() => [...document.querySelectorAll('#trigger option')].map((o) => o.value));
   for (const [k, code] of [['lctrl', 'ControlLeft'], ['lshift', 'ShiftLeft']]) {
     await p.selectOption('#trigger', k);
