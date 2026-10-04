@@ -20,7 +20,7 @@ const path = require('path');
   const ps = t.pitchShape || [], pk = ps.indexOf(Math.max(...ps));
   console.log('vowel means F1 F2 F3 (truth 552 1594 2893):', [0, 1, 2].map((i) => Math.round(m(i))).join(' '), '| pitch shape peak bin', pk, 'of 8');
   console.log('fricatives per syllable (truth about 0.3), sibilance centre Hz (truth 5500):', t.fric && t.fric.toFixed(2), t.sibFc && Math.round(t.sibFc));
-  const ok = before === null && t.fric > 0.12 && t.fric < 0.6 && t.sibFc > 3500 && t.sibFc < 8000 && t.vowels && m(0) > 440 && m(0) < 680 && m(1) > 1350 && m(1) < 1950 && pk >= 2 && pk <= 5 && t.ampShape && t.center > 185 && t.center < 230 && t.rate > 3 && t.rate < 6.5 && t.phrase >= 3 && /tuned to you/.test(msg) && !errs.length;
+  const ok = before === null && t.fric > 0.12 && t.fric < 0.6 && t.sibFc >= 3000 && t.sibFc <= 4800 && t.vowels && m(0) > 440 && m(0) < 680 && m(1) > 1350 && m(1) < 1950 && pk >= 2 && pk <= 5 && t.ampShape && t.center > 185 && t.center < 230 && t.rate > 3 && t.rate < 6.5 && t.phrase >= 3 && /tuned to you/.test(msg) && !errs.length;
   console.log(JSON.stringify(t), msg, errs);
   console.log(ok ? 'PROFILE OK' : 'PROFILE FAIL'); await b.close(); process.exit(ok ? 0 : 1);
 })();

@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v10</div>
+  <div class="ver" id="ver">MICE v11</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -332,14 +332,14 @@ const NEUTRAL = [[600, 1250, 2500], [520, 1500, 2500], [450, 1050, 2450], [560, 
 // consonant-like gestures: formant targets (Hz, before scaling) for the first ~30 ms, how low the loudness dips,
 // and how far the top end closes (a nasal is dull).
 const GESTURES = [null, { f: [280, 1100, 2300], dip: 0.5, lp: 1200 }, { f: [350, 900, 2200], dip: 0.7, lp: 2600 }, { f: [450, 1500, 2600], dip: 0.38, lp: 2200 }];
-// Real consonants: bands of noise that bypass the vowel filters. fc is relative to the sibilance centre ("s"), lvl is the noise
+// Real consonants: soft bands of noise (kept low and rounded off so they never sound thin or sharp) that bypass the vowel filters. fc is relative to the sibilance centre ("s"), lvl is the noise
 // level against the vowels, closure is a short silence before a burst. s and sh are the loud ones; f/th are faint.
 const NOISY = [
-  { name: 's',  fcr: 1.0,  Q: 1.4, lvl: 0.3, dur: 0.09,  closure: 0,    f: [320, 1400, 2500], dip: 0.25, lp: 3000, w: 4 },
-  { name: 'sh', fcr: 0.62, Q: 1.1, lvl: 0.25, dur: 0.1,  closure: 0,    f: [320, 1700, 2400], dip: 0.3, lp: 3000, w: 2 },
-  { name: 'f',  fcr: 0.8,  Q: 0.5, lvl: 0.1, dur: 0.07, closure: 0,    f: [350, 1200, 2400], dip: 0.5, lp: 3000, w: 2 },
-  { name: 'z',  fcr: 0.95, Q: 1.3, lvl: 0.12, dur: 0.08,  closure: 0,    f: [300, 1300, 2500], dip: 0.55, lp: 3000, w: 1 },
-  { name: 't',  fcr: 0.55, Q: 0.9, lvl: 0.33, dur: 0.02, closure: 0.04, f: [400, 1600, 2600], dip: 0.08, lp: 3000, w: 3 },
+  { name: 's',  fcr: 1.0,  Q: 0.7, lvl: 0.13, dur: 0.1,   closure: 0,    f: [320, 1400, 2500], dip: 0.45, lp: 3000, w: 4 },
+  { name: 'sh', fcr: 0.7,  Q: 0.7, lvl: 0.12, dur: 0.11,  closure: 0,    f: [320, 1700, 2400], dip: 0.5, lp: 3000, w: 2 },
+  { name: 'f',  fcr: 0.8,  Q: 0.4, lvl: 0.05, dur: 0.08,  closure: 0,    f: [350, 1200, 2400], dip: 0.65, lp: 3000, w: 2 },
+  { name: 'z',  fcr: 0.9,  Q: 0.7, lvl: 0.07, dur: 0.09,  closure: 0,    f: [300, 1300, 2500], dip: 0.7, lp: 3000, w: 1 },
+  { name: 't',  fcr: 0.7,  Q: 0.6, lvl: 0.15, dur: 0.025, closure: 0.04, f: [400, 1600, 2600], dip: 0.2, lp: 3000, w: 3 },
 ];
 function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   const R = Math.random;
@@ -368,9 +368,10 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
   const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(3000, t); lp.Q.value = 0.5;
   am.connect(lp); lp.connect(amp);
   const fnz = c.createBufferSource(); fnz.buffer = longNoise; fnz.loop = true; fnz.__started = true; srcs.push(fnz); fnz.start(t, R() * 2.5);
-  const nb = c.createBiquadFilter(); nb.type = 'bandpass'; nb.frequency.value = 6000; nb.Q.value = 1.2;
-  const fg = c.createGain(); fg.gain.setValueAtTime(0, t); fnz.connect(nb); nb.connect(fg); fg.connect(amp);   // consonant noise joins after the low-pass
-  const sibFc = tn.sibFc || 6000, pFric = tn.fric != null ? tn.fric : 0.2;
+  const nb = c.createBiquadFilter(); nb.type = 'bandpass'; nb.frequency.value = 3800; nb.Q.value = 0.7;
+  const nl = c.createBiquadFilter(); nl.type = 'lowpass'; nl.frequency.value = 4800; nl.Q.value = 0.5;      // nothing above 4.8 kHz: no thin, sharp edge
+  const fg = c.createGain(); fg.gain.setValueAtTime(0, t); fnz.connect(nb); nb.connect(nl); nl.connect(fg); fg.connect(amp);   // consonant noise joins after the low-pass
+  const sibFc = Math.min(4200, tn.sibFc || 3800), pFric = tn.fric != null ? tn.fric : 0.2;
   const Q = [4, 5, 6], G = [1, 0.55, 0.25];
   const fl = VT[0].map((f, i) => {
     const b = c.createBiquadFilter(); b.type = 'bandpass'; b.frequency.setValueAtTime(f, t); b.Q.value = Q[i];
@@ -426,8 +427,8 @@ function dynamicCue(c, t, f0, L, amp, rel, srcs, tune) {
       if (g.dur) {                                    // the consonant noise itself: a quick rise, a hold, a quick fall
         const t0 = ts + g.closure, lv = g.lvl * peak;
         nb.frequency.setValueAtTime(sibFc * g.fcr * (0.92 + R() * 0.16), ts); nb.Q.setValueAtTime(g.Q, ts);
-        fg.gain.setValueAtTime(0, t0); fg.gain.linearRampToValueAtTime(lv, t0 + Math.min(0.012, g.dur * 0.4));
-        fg.gain.setValueAtTime(lv, t0 + g.dur * 0.55); fg.gain.linearRampToValueAtTime(0, t0 + g.dur);
+        fg.gain.setValueAtTime(0, t0); fg.gain.linearRampToValueAtTime(lv, t0 + Math.min(0.025, g.dur * 0.4));
+        fg.gain.setValueAtTime(lv, t0 + g.dur * 0.5); fg.gain.linearRampToValueAtTime(0, t0 + g.dur);
       }
     }
     else { glide(am.gain, st.a, peak, ts, dur * 0.4); if (st.lp !== 3000) { glide(lp.frequency, st.lp, 3000, ts, 0.05); st.lp = 3000; } }
@@ -816,7 +817,7 @@ function tuneFor() {
   const t = { center, spread, rate, phrase, s1: sc, s2: sc };
   if (P.fricEv >= 3) {                                                            // how often syllables carry frication, and where the hiss sits
     t.fric = Math.max(0.1, Math.min(0.6, P.fricEv / Math.max(1, P.sec * rate)));
-    t.sibFc = Math.max(3500, Math.min(8000, (P.fzSum / Math.max(1, P.fz)) * cap.an.fs / 2));
+    t.sibFc = Math.max(3000, Math.min(4800, (P.fzSum / Math.max(1, P.fz)) * cap.an.fs / 2));
   }
   const v = vowelsFrom(P.fa);
   if (v) { t.vowels = v.map((x) => x.f); t.vowelW = v.map((x) => x.w); }
