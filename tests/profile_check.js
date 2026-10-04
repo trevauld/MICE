@@ -1,4 +1,4 @@
-// Plays test_speech.wav (190 Hz centre, about 5 syllables a second, 6-syllable phrases) into a session and checks
+// The cue is held while the speech plays (the Dynamic voice learns only from speech while the cue is held). Plays test_speech.wav (190 Hz centre, about 5 syllables a second, 6-syllable phrases) into a session and checks
 // that the Dynamic voice learns it after about 5.5 s of speech: pitch, rate, vowel formants (and the vocal-tract scale used for the SDV vowels) and the pitch shape of a phrase. Also checks the cue keeps sounding and nothing errors.
 const { chromium } = require('playwright');
 const path = require('path');
@@ -10,6 +10,7 @@ const path = require('path');
   await p.selectOption('#timbre', 'dynamic');
   await p.click('#sesBtn');
   await p.waitForFunction(() => document.getElementById('status').textContent.startsWith('Listening. Hold'), null, { timeout: 40000 });
+  await p.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true })));   // the user holds the cue while speaking
   const before = await p.evaluate(() => window.__mice.tune);
   await p.waitForFunction(() => window.__mice.tune, null, { timeout: 30000 });
   const early = await p.evaluate(() => window.__mice.tune);          // ready at about 5.5 s of speech

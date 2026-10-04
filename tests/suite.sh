@@ -7,6 +7,7 @@ fail=0
 echo "== interface";  node ui_check.js || fail=1
 echo "== voice detection (and no false voice in silence, hiss or hum)"; node detect_check.js || fail=1
 echo "== Dynamic voice learns the speaker"; node profile_check.js || fail=1
+echo "== another voice leaking into the microphone must not be learned"; node leak_check.js || fail=1
 echo "== hiss setting"; node hiss_check.js || fail=1
 echo "== screen stays awake while listening"; node wake_check.js || fail=1
 echo "== installable and offline (serving the folder on :8077)"

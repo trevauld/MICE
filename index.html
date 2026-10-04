@@ -110,7 +110,7 @@ details.fold[open]>summary{margin-bottom:12px}
 </head>
 <body>
 <div class="wrap">
-  <div class="ver" id="ver">MICE v18</div>
+  <div class="ver" id="ver">MICE v19</div>
   <div class="grid">
     <div class="col">
       <button id="pad" class="pad" type="button" aria-pressed="false" aria-label="Hold to play the cue">
@@ -163,7 +163,13 @@ details.fold[open]>summary{margin-bottom:12px}
           <option value="lshift">Left Shift</option>
           <option value="any">Any key (foot pedals and clickers)</option>
         </select></label>
-        <div id="hissBox" class="hiss" hidden>
+        <div id="sdvBox" class="hiss" hidden>
+          <label class="f">Learn my voice from<select id="learnMode">
+            <option value="hold">Speech while I hold the cue (best)</option>
+            <option value="all">All speech the microphone hears</option>
+            <option value="off">Nothing: keep what it has learned</option>
+          </select></label>
+          <div class="row"><button class="btn" id="forgetBtn" type="button">Forget what it learned</button></div>
           <label class="check"><input type="checkbox" id="hiss"> <span>Hiss: soft "s" and "sh" consonant noise in the Dynamic voice</span></label>
           <label class="f" id="hissAmt"><span class="lab">Hiss level <span class="val" id="hissVal"></span></span><input type="range" id="hissDb" min="-30" max="-4" step="1"></label>
         </div>
@@ -197,6 +203,7 @@ const S = {
   release: store.get('release', 120),
   muted: store.get('muted', false),
   hiss: store.get('hiss', true),
+  learnMode: store.get('learnMode', 'hold'),
   hissDb: store.get('hissDb', -16),
   trigger: store.get('trigger', 'space'),
   mic: store.get('mic', ''),
@@ -215,6 +222,7 @@ fill($('note'), noteItems, String(S.note));
 $('trigger').value = S.trigger;
 $('mute').checked = S.muted;
 $('hiss').checked = S.hiss;
+$('learnMode').value = S.learnMode;
 $('hissDb').value = String(S.hissDb);
 
 $('vol').value = String(Math.round(S.volume * 100));
@@ -223,15 +231,19 @@ function showVals() {
   $('volVal').textContent = Math.round(S.volume * 100) + '%';
   $('relVal').textContent = S.release + ' ms';
   $('hissVal').textContent = S.hissDb + ' dB';
-  $('hissBox').hidden = S.timbre !== 'dynamic';
+  $('sdvBox').hidden = S.timbre !== 'dynamic';
   $('hissAmt').style.opacity = S.hiss ? '1' : '0.45';
   $('hissDb').disabled = !S.hiss;
   $('padHint').textContent = 'Mouse, touch or ' + ({ space: 'space bar', lctrl: 'left Ctrl', lshift: 'left Shift' }[S.trigger] || 'any key');
 }
 showVals();
 function showMatch() {
-  const t = S.timbre === 'dynamic' ? tuneFor() : null;
-  $('matchMsg').textContent = t ? 'Dynamic voice is tuned to you: about ' + Math.round(t.center) + ' Hz, ' + t.rate.toFixed(1) + ' syllables a second.' : 'Sets the note to your speaking pitch.';
+  if (S.timbre !== 'dynamic') { $('matchMsg').textContent = 'Sets the note to your speaking pitch.'; return; }
+  const t = tuneFor(), P = capture && capture.prof;
+  if (t) $('matchMsg').textContent = 'Dynamic voice is tuned to you: about ' + Math.round(t.center) + ' Hz, ' + t.rate.toFixed(1) + ' syllables a second.' + (S.learnMode === 'off' ? ' (Learning is off.)' : '');
+  else if (!capture) $('matchMsg').textContent = 'Start listening: it learns your voice from your speech.';
+  else if (S.learnMode === 'off') $('matchMsg').textContent = 'Learning is off.';
+  else $('matchMsg').textContent = 'Learning your voice: ' + (P ? Math.min(5.5, P.sec).toFixed(1) : '0.0') + ' of 5.5 s of speech' + (S.learnMode === 'hold' ? ' while you hold the cue.' : '.');
 }
 
 function setSetting(key, value) {
@@ -242,11 +254,13 @@ $('note').addEventListener('change', (e) => setSetting('note', +e.target.value))
 $('vol').addEventListener('input', (e) => setSetting('volume', +e.target.value / 100));
 $('rel').addEventListener('input', (e) => setSetting('release', +e.target.value));
 $('trigger').addEventListener('change', (e) => setSetting('trigger', e.target.value));
+$('learnMode').addEventListener('change', (e) => { setSetting('learnMode', e.target.value); e.target.blur(); });
+$('forgetBtn').addEventListener('click', (e) => { e.currentTarget.blur(); if (capture) { capture.prof = newProfile(); capture.accept = false; } showMatch(); });
 $('hiss').addEventListener('change', (e) => setSetting('hiss', e.target.checked));
 $('hissDb').addEventListener('input', (e) => setSetting('hissDb', +e.target.value));
 $('mute').addEventListener('change', (e) => setSetting('muted', e.target.checked));
 $('micSel').addEventListener('change', (e) => { S.mic = e.target.value; store.set('mic', S.mic); });
-['timbre', 'note', 'trigger', 'micSel'].forEach((id) => $(id).addEventListener('change', (e) => e.target.blur()));
+['timbre', 'note', 'trigger', 'micSel', 'learnMode'].forEach((id) => $(id).addEventListener('change', (e) => e.target.blur()));
 
 // ---------------- audio engine ----------------
 let ctx = null, out = null, cueBus = null, markBus = null, gateSrc = null, noiseBuf = null, longNoise = null;
@@ -822,6 +836,7 @@ function finishSegment(P) {                       // fold one finished stretch o
 }
 function learn(cap, db, f0, end, floor) {   // floor: the room level in dB
   const P = cap.prof;
+  if (f0 > 0 && P.med && Math.abs(12 * Math.log2(f0 / P.med)) > 8) return;    // far from the pitch learned so far: not this voice (another voice, or a pitch error)
   if (cap.fc !== P.lastFc + 1) { P.s0 = P.s1 = P.s2 = null; P.valley = db; finishSegment(P); }
   if (!P.cur) P.cur = { db: [], f: [] };
   P.cur.db.push(db); P.cur.f.push(f0);
@@ -839,6 +854,7 @@ function learn(cap, db, f0, end, floor) {   // floor: the room level in dB
   if (f0 > 0) {
     if (P.f.length < 3000) P.f.push(f0); else P.f[P.fn % 3000] = f0;
     P.fn++;
+    if (P.fn >= 100 && P.fn % 100 === 0) P.med = median(P.f);
     if (P.fn % 2 === 0 && db > floor + 10 && cap.an.formants(end, P.fm)) {
       const [a, b, c] = P.fm;
       if (a > 200 && a < 1000 && b > a + 250 && b < 2900 && c > b + 300 && c < 3800) {
@@ -961,11 +977,25 @@ async function listMics() {
 }
 
 // Press, release and click times, read from the recorded marker channel (same clock as the voice).
+// Was the cue held around the time a voice started? Learning only from speech like that keeps other sounds (a call, a voice assistant
+// leaking into the microphone) from teaching the Dynamic voice. Held up to 0.8 s before the voice, or 0.2 s after, or still held.
+function pressNear(on) {
+  for (let i = livePresses.length - 1; i >= 0; i--) {
+    const p = livePresses[i];
+    if (p.down > on + 0.2) continue;
+    if (p.down >= on - 0.8) return true;
+    if (p.up == null || p.up >= on) return true;
+    break;
+  }
+  return false;
+}
+function learnOk(cap) { return S.learnMode === 'all' || (S.learnMode === 'hold' && cap.accept); }
 function onMarker(cap, type, k) {
   const t = cap.an.timeOf(k);
   if (type === 'press') {
     cap.an.armGain(k, cap.V.state !== 'voice'); cap.gainFrom = t;
     addLivePress({ down: t, up: null });
+    if (cap.V.state === 'voice') cap.accept = true;     // pressed while already speaking
   } else if (type === 'release') {
     for (let i = livePresses.length - 1; i >= 0; i--) { const p = livePresses[i]; if (!p.ctx && p.up == null) { p.up = t; break; } }
   } else cap.clicks.push(k);
@@ -1035,10 +1065,11 @@ function onFrame(cap, t, rawDb, cancDb, cueMs, end, held) {
       if (V.qrun >= 15) { V.state = 'quiet'; V.qrun = 0; voiceOff(cap, V.candEnd); }
     } else V.qrun = 0;
   }
-  if (V.state === 'voice' && cap.prof && !cap.prof.broken) {
+  if (V.state === 'voice' && cap.prof && !cap.prof.broken && learnOk(cap)) {
     try {                                    // learning is optional: it must never get in the way of voice detection
       learn(cap, db, f0, end, V.floor);
       if (!cap.prof.shown && profReady(cap.prof)) { cap.prof.shown = true; showMatch(); }
+      else if (!cap.prof.shown && cap.fc % 50 === 0) showMatch();      // progress while it is learning
     } catch (err) { cap.prof.broken = true; console.error('voice learning stopped:', err); }
   }
   const vad = V.state === 'voice' ? 1 : 0;
@@ -1075,6 +1106,7 @@ const liveSegs = [];
 function voiceOn(cap, on) {
   on = refineOnset(cap, on);
   cap.segOpen = on;
+  cap.accept = pressNear(on);
   fixHist(cap, on, 1);
 }
 function voiceOff(cap, off) {

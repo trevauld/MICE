@@ -14,7 +14,8 @@ const path = require('path');
   res.padFirst = await p.evaluate(() => document.querySelector('.wrap').children[1].querySelector('#pad') !== null);
   res.userSelect = await p.evaluate(() => getComputedStyle(document.querySelector('#pad .big')).userSelect);
   res.bodySelect = await p.evaluate(() => [getComputedStyle(document.body).userSelect, getComputedStyle(document.getElementById('tlTitle')).userSelect]);
-  res.hissHidden = await p.evaluate(() => document.getElementById('hissBox').hidden);   // hidden until Dynamic voice is chosen
+  res.learnModes = await p.evaluate(() => [...document.querySelectorAll('#learnMode option')].map((o) => o.value).join(','));
+  res.hissHidden = await p.evaluate(() => document.getElementById('sdvBox').hidden);   // hidden until Dynamic voice is chosen
   res.folds = await p.evaluate(() => [...document.querySelectorAll('details.fold')].map((d) => d.open));
   await p.click('#sesFold > summary'); res.afterClick = await p.evaluate(() => document.getElementById('sesFold').open);
   res.options = await p.evaluate(() => [...document.querySelectorAll('#trigger option')].map((o) => o.value));

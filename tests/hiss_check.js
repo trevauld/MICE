@@ -20,7 +20,7 @@ async function measure(browser, hiss, db) {
       if (10 * Math.log10((hi + 1e-12) / (lo + 1e-12)) > -32) n++;
     }
     document.getElementById('pad').dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, bubbles: true }));
-    return { n, boxHidden: document.getElementById('hissBox').hidden };
+    return { n, boxHidden: document.getElementById('sdvBox').hidden };
   });
   await p.close(); return r;
 }

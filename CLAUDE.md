@@ -43,6 +43,10 @@ anything (no files, no zip, no recordings) and does no timing statistics. The la
   F1–F3 at 20% and 80% of each vowel (so each vowel has its own glide) and mean duration (so /ae/ is longer than /ih/). The weights `w`
   (reduced vowels most often) are my own estimate. Formants are scaled to the voice by the fitted law (f0/130)^(0.31, 0.33, 0.27)
   (r 0.82–0.87 over the 139 speakers), nudged toward the formants measured on the user. `MUMBLE` pulls vowels toward the average vowel.
+- **Whose voice (`pressNear`, `learnOk`):** a voice assistant or call leaking into the microphone must not teach SDV (it once learned Claude's voice). By default
+  learning only counts speech where the cue was held (up to 0.8 s before the voice starts, 0.2 s after, or still held). The setting "Learn my voice from" can
+  also allow all speech, or freeze learning; "Forget what it learned" resets it. As a second guard `learn` skips frames more than 8 semitones from the pitch
+  learned so far. Test: `tests/leak_check.js`.
 - **Learning (`newProfile`, `learn`, `tuneFor`):** after about 5.5 s of detected speech SDV uses the user's median pitch and range, how often
   syllables carry frication and where the hiss sits (zero-crossing rate of loud unpitched frames inside speech), syllable rate (loudness
   peaks), phrase length and mean measured formants (LPC) for the vowel scale. After a few finished phrases it also uses the user's pitch
